@@ -2,7 +2,7 @@
 // Utility to upload images to Cloudinary (unsigned)
 
 export async function uploadToCloudinary(file: File): Promise<string> {
-  const url = 'https://api.cloudinary.com/v1_1/6e2daf5a-f7b1-4692-b267-011477e48836/image/upload';
+  const url = 'https://api.cloudinary.com/v1_1/drifopwan/image/upload';
   const preset = 'bakery'; // Your unsigned upload preset
   const folder = 'samples/ecommerce'; // Optional: folder in Cloudinary
 
