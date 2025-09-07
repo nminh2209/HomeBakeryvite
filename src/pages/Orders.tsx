@@ -127,7 +127,7 @@ const Orders: React.FC = () => {
   ];
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', width: '100%' }}>
+    <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', padding: '2vw' }}>
       <h2>Quản lý đơn hàng</h2>
       <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{ marginBottom: 16 }}>
         Thêm đơn hàng

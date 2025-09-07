@@ -14,31 +14,63 @@ const RECEIPT_INFO = {
 
 // Printable receipt component
 const Receipt: React.FC<{ bill: Bill }> = ({ bill }) => (
-  <div id="print-receipt" style={{ width: 320, margin: '0 auto', fontFamily: 'monospace', background: '#fff', padding: 16, borderRadius: 8, border: '1px dashed #aaa' }}>
-    <div style={{ textAlign: 'center', marginBottom: 8 }}>
-      <h2 style={{ margin: 0 }}>{RECEIPT_INFO.brand}</h2>
-      <div style={{ fontSize: 12 }}>{RECEIPT_INFO.address}</div>
-      <div style={{ fontSize: 12 }}>ĐT: {RECEIPT_INFO.phone}</div>
+  <div
+    id="print-receipt"
+    style={{
+      maxWidth: 360,
+      width: '100%',
+      margin: '0 auto',
+      fontFamily: 'monospace',
+      background: '#fff',
+      padding: '4vw 3vw',
+      borderRadius: 8,
+      border: '1px dashed #aaa',
+      boxSizing: 'border-box',
+      fontSize: 'clamp(13px, 3vw, 16px)',
+      minHeight: 0,
+    }}
+  >
+    <div style={{ textAlign: 'center', marginBottom: '2vw' }}>
+      <h2 style={{ margin: 0, fontSize: 'clamp(18px, 5vw, 24px)' }}>{RECEIPT_INFO.brand}</h2>
+      <div style={{ fontSize: 'clamp(11px, 2.5vw, 14px)' }}>{RECEIPT_INFO.address}</div>
+      <div style={{ fontSize: 'clamp(11px, 2.5vw, 14px)' }}>ĐT: {RECEIPT_INFO.phone}</div>
     </div>
-    <hr style={{ border: 'none', borderTop: '1px dashed #aaa', margin: '8px 0' }} />
-    <div style={{ fontSize: 14, marginBottom: 8 }}>
+    <hr style={{ border: 'none', borderTop: '1px dashed #aaa', margin: '2vw 0' }} />
+    <div style={{ fontSize: 'clamp(13px, 3vw, 16px)', marginBottom: '2vw' }}>
       <div><b>Khách:</b> {bill.customer}</div>
       <div><b>Ngày:</b> {bill.date}</div>
       <div><b>Số tiền:</b> {bill.amount.toLocaleString('vi-VN')} VNĐ</div>
       {bill.note && <div><b>Ghi chú:</b> {bill.note}</div>}
       <div><b>Trạng thái:</b> {statusOptions.find(opt => opt.value === bill.status)?.label}</div>
     </div>
-    <hr style={{ border: 'none', borderTop: '1px dashed #aaa', margin: '8px 0' }} />
-    <div style={{ textAlign: 'center', fontSize: 13, marginBottom: 8 }}>
-      <span style={{ margin: '0 4px' }}><FacebookOutlined /> {RECEIPT_INFO.facebook}</span><br />
-      <span style={{ margin: '0 4px' }}><InstagramOutlined /> {RECEIPT_INFO.instagram}</span><br />
-      <span style={{ margin: '0 4px' }}>TikTok: {RECEIPT_INFO.tiktok}</span>
+    <hr style={{ border: 'none', borderTop: '1px dashed #aaa', margin: '2vw 0' }} />
+    <div style={{ textAlign: 'center', fontSize: 'clamp(12px, 2.8vw, 15px)', marginBottom: '2vw', wordBreak: 'break-all' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+        <span style={{ margin: '0 4px' }}><FacebookOutlined /> {RECEIPT_INFO.facebook}</span>
+        <span style={{ margin: '0 4px' }}><InstagramOutlined /> {RECEIPT_INFO.instagram}</span>
+        <span style={{ margin: '0 4px' }}>TikTok: {RECEIPT_INFO.tiktok}</span>
+      </div>
     </div>
-    <div style={{ textAlign: 'center', marginTop: 12 }}>
-      {bill.qrCode && <img src={bill.qrCode} alt="QR" style={{ width: 120, height: 120, margin: '0 auto', display: 'block' }} />}
-      <div style={{ fontSize: 12, marginTop: 4 }}>Quét mã để thanh toán</div>
+    <div style={{ textAlign: 'center', marginTop: '3vw' }}>
+      {bill.qrCode && (
+        <img
+          src={bill.qrCode}
+          alt="QR"
+          style={{
+            width: '32vw',
+            maxWidth: 140,
+            height: '32vw',
+            maxHeight: 140,
+            margin: '0 auto',
+            display: 'block',
+          }}
+        />
+      )}
+      <div style={{ fontSize: 'clamp(11px, 2vw, 13px)', marginTop: 4 }}>Quét mã để thanh toán</div>
     </div>
-    <div style={{ textAlign: 'center', fontSize: 11, marginTop: 8, color: '#888' }}>Cảm ơn quý khách!</div>
+    <div style={{ textAlign: 'center', fontSize: 'clamp(10px, 2vw, 12px)', marginTop: '2vw', color: '#888' }}>
+      Cảm ơn quý khách!
+    </div>
   </div>
 );
 import dayjs from 'dayjs';
@@ -257,7 +289,7 @@ const Billing: React.FC = () => {
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', width: '100%' }}>
+  <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', padding: '2vw' }}>
       <h2>Quản lý hóa đơn</h2>
       <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{ marginBottom: 16, marginRight: 8 }}>
         Thêm hóa đơn
