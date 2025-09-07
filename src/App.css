@@ -1,0 +1,76 @@
+
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+
+/* Fix Ant Design layout background and content */
+html, body, #root {
+  background: #f0f2f5 !important;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+
+.ant-layout {
+  background: #f0f2f5 !important;
+  min-height: 100vh;
+}
+
+.ant-layout {
+  background: #f0f2f5 !important;
+  min-height: 100vh;
+  width: 100vw;
+}
+
+.ant-layout-sider {
+  min-height: 100vh !important;
+  background: #001529 !important;
+}
+
+.ant-layout-header {
+  background: #fff !important;
+  box-shadow: 0 2px 8px #f0f1f2;
+  z-index: 1;
+}
+
+.ant-layout-content {
+  background: #f0f2f5 !important;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+}
+.ant-menu-item {
+  font-size: 16px;
+}
+
+.read-the-docs {
+  color: #888;
+}
