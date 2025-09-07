@@ -1,6 +1,46 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, DatePicker, Popconfirm, message, Select, Upload } from 'antd';
-import { PlusOutlined, PrinterOutlined, UploadOutlined } from '@ant-design/icons';
+import { PlusOutlined, PrinterOutlined, UploadOutlined, FacebookOutlined, InstagramOutlined } from '@ant-design/icons';
+
+// Hardcoded brand/contact/social info
+const RECEIPT_INFO = {
+  brand: 'Tiệm Bánh Minh',
+  phone: '0123 456 789',
+  facebook: 'facebook.com/tiembanhminh',
+  instagram: 'instagram.com/tiembanhminh',
+  tiktok: 'tiktok.com/@tiembanhminh',
+  address: '123 Đường Bánh Ngon, Quận 1, TP.HCM',
+};
+
+// Printable receipt component
+const Receipt: React.FC<{ bill: Bill }> = ({ bill }) => (
+  <div id="print-receipt" style={{ width: 320, margin: '0 auto', fontFamily: 'monospace', background: '#fff', padding: 16, borderRadius: 8, border: '1px dashed #aaa' }}>
+    <div style={{ textAlign: 'center', marginBottom: 8 }}>
+      <h2 style={{ margin: 0 }}>{RECEIPT_INFO.brand}</h2>
+      <div style={{ fontSize: 12 }}>{RECEIPT_INFO.address}</div>
+      <div style={{ fontSize: 12 }}>ĐT: {RECEIPT_INFO.phone}</div>
+    </div>
+    <hr style={{ border: 'none', borderTop: '1px dashed #aaa', margin: '8px 0' }} />
+    <div style={{ fontSize: 14, marginBottom: 8 }}>
+      <div><b>Khách:</b> {bill.customer}</div>
+      <div><b>Ngày:</b> {bill.date}</div>
+      <div><b>Số tiền:</b> {bill.amount.toLocaleString('vi-VN')} VNĐ</div>
+      {bill.note && <div><b>Ghi chú:</b> {bill.note}</div>}
+      <div><b>Trạng thái:</b> {statusOptions.find(opt => opt.value === bill.status)?.label}</div>
+    </div>
+    <hr style={{ border: 'none', borderTop: '1px dashed #aaa', margin: '8px 0' }} />
+    <div style={{ textAlign: 'center', fontSize: 13, marginBottom: 8 }}>
+      <span style={{ margin: '0 4px' }}><FacebookOutlined /> {RECEIPT_INFO.facebook}</span><br />
+      <span style={{ margin: '0 4px' }}><InstagramOutlined /> {RECEIPT_INFO.instagram}</span><br />
+      <span style={{ margin: '0 4px' }}>TikTok: {RECEIPT_INFO.tiktok}</span>
+    </div>
+    <div style={{ textAlign: 'center', marginTop: 12 }}>
+      {bill.qrCode && <img src={bill.qrCode} alt="QR" style={{ width: 120, height: 120, margin: '0 auto', display: 'block' }} />}
+      <div style={{ fontSize: 12, marginTop: 4 }}>Quét mã để thanh toán</div>
+    </div>
+    <div style={{ textAlign: 'center', fontSize: 11, marginTop: 8, color: '#888' }}>Cảm ơn quý khách!</div>
+  </div>
+);
 import dayjs from 'dayjs';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
@@ -101,9 +141,21 @@ const Billing: React.FC = () => {
     message.success('Đã xóa hóa đơn!');
   };
 
-  const handlePrint = () => {
-    window.print();
-    message.info('Đã gửi lệnh in hóa đơn!');
+  // Print only the receipt for a bill
+  const handlePrintReceipt = (bill: Bill) => {
+    const printWindow = window.open('', '', 'width=400,height=600');
+    if (printWindow) {
+      printWindow.document.write('<html><head><title>In hóa đơn</title>');
+      printWindow.document.write('<style>body{background:#fff;}@media print{@page{size:auto;margin:10mm;}}</style>');
+      printWindow.document.write('</head><body>');
+      printWindow.document.write(document.getElementById('receipt-content-' + bill.key)?.innerHTML || '');
+      printWindow.document.write('</body></html>');
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 300);
+    }
   };
 
   const handleOk = async () => {
@@ -189,8 +241,8 @@ const Billing: React.FC = () => {
               Xóa
             </Button>
           </Popconfirm>
-          <Button type="link" icon={<PrinterOutlined />} onClick={handlePrint}>
-            In
+          <Button type="link" icon={<PrinterOutlined />} onClick={() => handlePrintReceipt(record)}>
+            In hóa đơn
           </Button>
         </>
       ),
@@ -214,6 +266,14 @@ const Billing: React.FC = () => {
         Tạo hóa đơn từ đơn hàng
       </Button>
       <Table columns={columns} dataSource={bills} pagination={{ pageSize: 5 }} />
+      {/* Hidden receipt containers for printing */}
+      <div style={{ display: 'none' }}>
+        {bills.map(bill => (
+          <div key={bill.key} id={'receipt-content-' + bill.key}>
+            <Receipt bill={bill} />
+          </div>
+        ))}
+      </div>
       {/* Modal for selecting order */}
       <Modal
         title="Chọn đơn hàng để tạo hóa đơn"
