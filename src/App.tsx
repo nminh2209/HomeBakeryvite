@@ -103,7 +103,7 @@ const App: React.FC = () => {
     <Layout style={{ minHeight: '100vh' }}>
       <Sider breakpoint="lg" collapsedWidth="0">
         <div style={{ height: 32, margin: 16, color: '#fff', fontWeight: 'bold', fontSize: 18 }}>
-          Quản trị Tiệm Bánh
+          Quản Lý Tiệm Bánh
         </div>
         <Menu
           theme="dark"
@@ -121,7 +121,7 @@ const App: React.FC = () => {
       </Sider>
       <Layout>
         <Header style={{ background: '#fff', padding: 0, textAlign: 'center', fontWeight: 'bold', fontSize: 24 }}>
-          Hệ thống quản lý tiệm bánh Việt Nam
+          Hệ thống quản lý tiệm bánh Vân Ngọc
         </Header>
         <Content style={{ margin: '24px 16px 0', overflow: 'initial' }}>
           <div style={{ padding: 24, background: '#fff', minHeight: 360 }}>
