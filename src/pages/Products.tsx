@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, Upload, message, Popconfirm } from 'antd';
 import { PlusOutlined, UploadOutlined } from '@ant-design/icons';
-import { db, storage } from '../firebase';
+import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadToCloudinary } from '../utils/cloudinaryUpload';
 
 interface Product {
   key: string;
@@ -57,9 +57,7 @@ const Products: React.FC = () => {
       // Nếu có file ảnh mới upload
       if (values.image && values.image[0]?.originFileObj) {
         const file = values.image[0].originFileObj;
-        const storageRef = ref(storage, `products/${Date.now()}_${file.name}`);
-        await uploadBytes(storageRef, file);
-        imageUrl = await getDownloadURL(storageRef);
+  imageUrl = await uploadToCloudinary(file);
       }
       const productData = {
         name: values.name,

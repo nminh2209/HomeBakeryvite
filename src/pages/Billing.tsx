@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, DatePicker, Popconfirm, message, Select, Upload } from 'antd';
 import { PlusOutlined, PrinterOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { db, storage } from '../firebase';
+import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadToCloudinary } from '../utils/cloudinaryUpload';
 
 interface Bill {
   key: string;
@@ -113,9 +113,7 @@ const Billing: React.FC = () => {
       let qrCodeUrl = values.qrCode;
       if (values.qrCode && values.qrCode[0]?.originFileObj) {
         const file = values.qrCode[0].originFileObj;
-        const storageRef = ref(storage, `bills/qr_${Date.now()}_${file.name}`);
-        await uploadBytes(storageRef, file);
-        qrCodeUrl = await getDownloadURL(storageRef);
+        qrCodeUrl = await uploadToCloudinary(file);
       }
       const billData = {
         customer: values.customer,
