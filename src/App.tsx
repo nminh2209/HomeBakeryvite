@@ -23,6 +23,8 @@ import Suppliers from './pages/Suppliers';
 import Contacts from './pages/Contacts';
 import Ingredients from './pages/Ingredients';
 import Products from './pages/Products';
+import ProductCategories from './pages/ProductCategories';
+import Customers from './pages/Customers';
 import Billing from './pages/Billing';
 import 'antd/dist/reset.css';
 
@@ -34,8 +36,10 @@ const pageMap: Record<string, React.ReactNode> = {
   supply: <Supply />,
   suppliers: <Suppliers />,
   contacts: <Contacts />,
+  customers: <Customers />,
   ingredients: <Ingredients />,
   products: <Products />,
+  productCategories: <ProductCategories />,
   billing: <Billing />,
 };
 
@@ -51,6 +55,21 @@ const menuItems: MenuProps['items'] = [
     label: 'Đơn hàng',
   },
   {
+    key: 'customers',
+    icon: <UserOutlined />,
+    label: 'Quản lý khách hàng',
+  },
+  {
+    key: 'products',
+    icon: <AppstoreOutlined />,
+    label: 'Sản phẩm',
+  },
+  {
+    key: 'productCategories',
+    icon: <AppstoreOutlined />,
+    label: 'Loại sản phẩm',
+  },
+  {
     key: 'supply',
     icon: <SolutionOutlined />,
     label: 'Cung ứng',
@@ -62,18 +81,13 @@ const menuItems: MenuProps['items'] = [
   },
   {
     key: 'contacts',
-    icon: <UserOutlined />,
+    icon: <ContactsOutlined />,
     label: 'Liên hệ',
   },
   {
     key: 'ingredients',
     icon: <DropboxOutlined />,
     label: 'Nguyên liệu',
-  },
-  {
-    key: 'products',
-    icon: <AppstoreOutlined />,
-    label: 'Sản phẩm',
   },
   {
     key: 'billing',

@@ -1,8 +1,8 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, InputNumber, DatePicker, Select, Popconfirm, message } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { Table, Button, Modal, Form, Input, InputNumber, DatePicker, Select, Popconfirm, message, Card } from 'antd';
+import { PlusOutlined, PhoneOutlined, UserOutlined, ShoppingCartOutlined, MoneyCollectOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
@@ -10,43 +10,170 @@ import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase
 interface Order {
   key: string;
   customer: string;
-  product: string;
-  quantity: number;
+  customerPhone: string;
+  customerAddress: string;
+  products: OrderProduct[];
+  subtotal: number;
+  discount: number;
+  total: number;
   date: string;
-  status: string;
+  paymentStatus: 'paid' | 'unpaid';
   note?: string;
 }
 
-const statusOptions = [
-  { value: 'pending', label: 'Chờ xử lý' },
-  { value: 'completed', label: 'Hoàn thành' },
-  { value: 'cancelled', label: 'Đã hủy' },
+interface OrderProduct {
+  productId: string;
+  productName: string;
+  quantity: number;
+  price: number;
+  total: number;
+}
+
+interface Customer {
+  key: string;
+  name: string;
+  phone: string;
+  address: string;
+  purchaseHistory?: string;
+}
+
+interface Product {
+  key: string;
+  name: string;
+  price: number;
+  category: string;
+  productCode: string;
+}
+
+const paymentStatusOptions = [
+  { value: 'unpaid', label: 'Chưa thanh toán' },
+  { value: 'paid', label: 'Đã thanh toán' },
 ];
 
 const Orders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [form] = Form.useForm();
+  const [selectedProducts, setSelectedProducts] = useState<OrderProduct[]>([]);
+  const [subtotal, setSubtotal] = useState(0);
+  const [discount, setDiscount] = useState(0);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      const querySnapshot = await getDocs(collection(db, 'orders'));
-      const data: Order[] = querySnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Order));
-      setOrders(data);
+    const fetchData = async () => {
+      // Fetch orders
+      const ordersSnapshot = await getDocs(collection(db, 'orders'));
+      const ordersData: Order[] = ordersSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Order));
+      setOrders(ordersData);
+      
+      // Fetch customers
+      const customersSnapshot = await getDocs(collection(db, 'customers'));
+      const customersData: Customer[] = customersSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Customer));
+      setCustomers(customersData);
+      
+      // Fetch products
+      const productsSnapshot = await getDocs(collection(db, 'products'));
+      const productsData: Product[] = productsSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Product));
+      setProducts(productsData);
     };
-    fetchOrders();
+    fetchData();
   }, []);
+
+  // Normalize phone number for lookup
+  const normalizePhone = (phone: string): string => {
+    let normalized = phone.replace(/[\s\-\(\)]/g, '');
+    if (normalized.startsWith('+84')) {
+      normalized = '0' + normalized.slice(3);
+    } else if (normalized.startsWith('84')) {
+      normalized = '0' + normalized.slice(2);
+    }
+    return normalized;
+  };
+
+  // Auto-fill customer info when phone is entered
+  const handlePhoneChange = async (phone: string) => {
+    const normalizedPhone = normalizePhone(phone);
+    const customer = customers.find(c => c.phone === normalizedPhone);
+    if (customer) {
+      form.setFieldsValue({
+        customer: customer.name,
+        customerAddress: customer.address,
+      });
+      message.success(`Đã tìm thấy khách hàng: ${customer.name}`);
+    }
+  };
+
+  // Calculate totals
+  const calculateTotals = (products: OrderProduct[], discountValue: number) => {
+    const subtotalValue = products.reduce((sum, p) => sum + p.total, 0);
+    const totalValue = subtotalValue - discountValue;
+    setSubtotal(subtotalValue);
+    setTotal(totalValue);
+  };
+
+  // Handle product selection
+  const handleProductAdd = () => {
+    const productId = form.getFieldValue('selectedProduct');
+    const quantity = form.getFieldValue('selectedQuantity') || 1;
+    const product = products.find(p => p.key === productId);
+    
+    if (product && quantity > 0) {
+      const existingIndex = selectedProducts.findIndex(p => p.productId === productId);
+      let updatedProducts: OrderProduct[];
+      
+      if (existingIndex >= 0) {
+        updatedProducts = [...selectedProducts];
+        updatedProducts[existingIndex].quantity += quantity;
+        updatedProducts[existingIndex].total = updatedProducts[existingIndex].quantity * product.price;
+      } else {
+        const newProduct: OrderProduct = {
+          productId: product.key,
+          productName: product.name,
+          quantity: quantity,
+          price: product.price,
+          total: quantity * product.price,
+        };
+        updatedProducts = [...selectedProducts, newProduct];
+      }
+      
+      setSelectedProducts(updatedProducts);
+      calculateTotals(updatedProducts, discount);
+      form.setFieldsValue({ selectedProduct: undefined, selectedQuantity: 1 });
+    }
+  };
+
+  // Remove product from selection
+  const handleProductRemove = (productId: string) => {
+    const updatedProducts = selectedProducts.filter(p => p.productId !== productId);
+    setSelectedProducts(updatedProducts);
+    calculateTotals(updatedProducts, discount);
+  };
 
   const handleAdd = () => {
     setEditingOrder(null);
+    setSelectedProducts([]);
+    setSubtotal(0);
+    setDiscount(0);
+    setTotal(0);
     form.resetFields();
     setIsModalOpen(true);
   };
 
   const handleEdit = (record: Order) => {
     setEditingOrder(record);
-    form.setFieldsValue({ ...record, date: dayjs(record.date) });
+    setSelectedProducts(record.products || []);
+    setSubtotal(record.subtotal || 0);
+    setDiscount(record.discount || 0);
+    setTotal(record.total || 0);
+    form.setFieldsValue({ 
+      ...record, 
+      date: dayjs(record.date),
+      customerPhone: record.customerPhone,
+      customerAddress: record.customerAddress,
+    });
     setIsModalOpen(true);
   };
 
@@ -59,7 +186,24 @@ const Orders: React.FC = () => {
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
-      const orderData = { ...values, date: values.date.format('YYYY-MM-DD') };
+      if (selectedProducts.length === 0) {
+        message.error('Vui lòng chọn ít nhất một sản phẩm!');
+        return;
+      }
+      
+      const orderData: Omit<Order, 'key'> = {
+        customer: values.customer,
+        customerPhone: values.customerPhone,
+        customerAddress: values.customerAddress,
+        products: selectedProducts,
+        subtotal: subtotal,
+        discount: discount,
+        total: total,
+        date: values.date.format('YYYY-MM-DD'),
+        paymentStatus: values.paymentStatus,
+        note: values.note || '',
+      };
+      
       if (editingOrder) {
         await updateDoc(doc(db, 'orders', editingOrder.key), orderData);
         setOrders(orders.map((item) => item.key === editingOrder.key ? { ...editingOrder, ...orderData } : item));
@@ -71,6 +215,10 @@ const Orders: React.FC = () => {
       }
       setIsModalOpen(false);
       form.resetFields();
+      setSelectedProducts([]);
+      setSubtotal(0);
+      setDiscount(0);
+      setTotal(0);
     } catch (err) {
       message.error('Lỗi khi lưu đơn hàng!');
     }
@@ -81,16 +229,39 @@ const Orders: React.FC = () => {
       title: 'Khách hàng',
       dataIndex: 'customer',
       key: 'customer',
+      render: (text: string, record: Order) => (
+        <div>
+          <div><UserOutlined /> {text}</div>
+          <div style={{ fontSize: 12, color: '#666' }}><PhoneOutlined /> {record.customerPhone}</div>
+        </div>
+      ),
     },
     {
       title: 'Sản phẩm',
-      dataIndex: 'product',
-      key: 'product',
+      dataIndex: 'products',
+      key: 'products',
+      render: (products: OrderProduct[]) => (
+        <div>
+          {products?.map((p, idx) => (
+            <div key={idx} style={{ fontSize: 12 }}>
+              {p.productName} x{p.quantity}
+            </div>
+          ))}
+        </div>
+      ),
     },
     {
-      title: 'Số lượng',
-      dataIndex: 'quantity',
-      key: 'quantity',
+      title: 'Tổng tiền',
+      dataIndex: 'total',
+      key: 'total',
+      render: (total: number, record: Order) => (
+        <div>
+          <div><strong>{total?.toLocaleString('vi-VN')} VNĐ</strong></div>
+          {record.discount > 0 && (
+            <div style={{ fontSize: 11, color: '#666' }}>Giảm: {record.discount?.toLocaleString('vi-VN')} VNĐ</div>
+          )}
+        </div>
+      ),
     },
     {
       title: 'Ngày',
@@ -98,15 +269,14 @@ const Orders: React.FC = () => {
       key: 'date',
     },
     {
-      title: 'Trạng thái',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: string) => statusOptions.find(opt => opt.value === status)?.label,
-    },
-    {
-      title: 'Ghi chú',
-      dataIndex: 'note',
-      key: 'note',
+      title: 'Thanh toán',
+      dataIndex: 'paymentStatus',
+      key: 'paymentStatus',
+      render: (status: string) => {
+        const option = paymentStatusOptions.find(opt => opt.value === status);
+        const color = status === 'paid' ? '#52c41a' : '#f5222d';
+        return <span style={{ color }}><MoneyCollectOutlined /> {option?.label}</span>;
+      },
     },
     {
       title: 'Hành động',
@@ -128,7 +298,21 @@ const Orders: React.FC = () => {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', padding: '2vw' }}>
-      <h2>Quản lý đơn hàng</h2>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+        <ShoppingCartOutlined style={{ fontSize: 24, marginRight: 8 }} />
+        <h2 style={{ margin: 0 }}>Quản lý đơn hàng</h2>
+      </div>
+      
+      <Card style={{ marginBottom: 16 }}>
+        <p><strong>Tính năng mới:</strong></p>
+        <ul>
+          <li>Tự động điền thông tin khi nhập số điện thoại khách hàng cũ</li>
+          <li>Cho phép chọn nhiều sản phẩm với số lượng khác nhau</li>
+          <li>Tính toán tự động: tạm tính, giảm giá, tổng tiền</li>
+          <li>Trạng thái thanh toán: đã thanh toán / chưa thanh toán</li>
+        </ul>
+      </Card>
+
       <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{ marginBottom: 16 }}>
         Thêm đơn hàng
       </Button>
@@ -140,46 +324,200 @@ const Orders: React.FC = () => {
         onCancel={() => setIsModalOpen(false)}
         okText="Lưu"
         cancelText="Hủy"
+        width={800}
       >
         <Form form={form} layout="vertical">
-          <Form.Item
-            name="customer"
-            label="Khách hàng"
-            rules={[{ required: true, message: 'Vui lòng nhập tên khách hàng!' }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item
-            name="product"
-            label="Sản phẩm"
-            rules={[{ required: true, message: 'Vui lòng nhập tên sản phẩm!' }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item
-            name="quantity"
-            label="Số lượng"
-            rules={[{ required: true, message: 'Vui lòng nhập số lượng!' }]}
-          >
-            <InputNumber min={1} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item
-            name="date"
-            label="Ngày"
-            rules={[{ required: true, message: 'Vui lòng chọn ngày!' }]}
-          >
-            <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
-          </Form.Item>
-          <Form.Item
-            name="status"
-            label="Trạng thái"
-            rules={[{ required: true, message: 'Vui lòng chọn trạng thái!' }]}
-          >
-            <Select options={statusOptions} />
-          </Form.Item>
-          <Form.Item name="note" label="Ghi chú">
-            <Input />
-          </Form.Item>
+          {/* Customer Information */}
+          <Card title="Thông tin khách hàng" size="small" style={{ marginBottom: 16 }}>
+            <Form.Item
+              name="customerPhone"
+              label="Số điện thoại"
+              rules={[{ required: true, message: 'Vui lòng nhập số điện thoại!' }]}
+            >
+              <Input 
+                prefix={<PhoneOutlined />} 
+                placeholder="0123456789 (tự động tìm khách hàng cũ)"
+                onChange={(e) => {
+                  const phone = e.target.value;
+                  const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
+                  let normalized = normalizedPhone;
+                  if (normalized.startsWith('+84')) {
+                    normalized = '0' + normalized.slice(3);
+                  } else if (normalized.startsWith('84')) {
+                    normalized = '0' + normalized.slice(2);
+                  }
+                  const customer = customers.find(c => c.phone === normalized);
+                  if (customer) {
+                    form.setFieldsValue({
+                      customer: customer.name,
+                      customerAddress: customer.address,
+                    });
+                    message.success(`Đã tìm thấy khách hàng: ${customer.name}`);
+                  }
+                }}
+              />
+            </Form.Item>
+            <Form.Item
+              name="customer"
+              label="Tên khách hàng"
+              rules={[{ required: true, message: 'Vui lòng nhập tên khách hàng!' }]}
+            >
+              <Input prefix={<UserOutlined />} placeholder="Nhập tên khách hàng" />
+            </Form.Item>
+            <Form.Item
+              name="customerAddress"
+              label="Địa chỉ"
+              rules={[{ required: true, message: 'Vui lòng nhập địa chỉ!' }]}
+            >
+              <Input placeholder="Nhập địa chỉ giao hàng" />
+            </Form.Item>
+          </Card>
+
+          {/* Product Selection */}
+          <Card title="Chọn sản phẩm" size="small" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <Form.Item name="selectedProduct" style={{ flex: 1, marginBottom: 0 }}>
+                <Select 
+                  placeholder="Chọn sản phẩm"
+                  options={products.map(p => ({
+                    value: p.key, 
+                    label: `${p.name} - ${p.price.toLocaleString('vi-VN')} VNĐ`
+                  }))}
+                />
+              </Form.Item>
+              <Form.Item name="selectedQuantity" style={{ width: 80, marginBottom: 0 }}>
+                <InputNumber min={1} defaultValue={1} />
+              </Form.Item>
+              <Button 
+                type="primary" 
+                onClick={() => {
+                  const productId = form.getFieldValue('selectedProduct');
+                  const quantity = form.getFieldValue('selectedQuantity') || 1;
+                  const product = products.find(p => p.key === productId);
+                  
+                  if (product && quantity > 0) {
+                    const existingIndex = selectedProducts.findIndex(p => p.productId === productId);
+                    let updatedProducts: OrderProduct[];
+                    
+                    if (existingIndex >= 0) {
+                      updatedProducts = [...selectedProducts];
+                      updatedProducts[existingIndex].quantity += quantity;
+                      updatedProducts[existingIndex].total = updatedProducts[existingIndex].quantity * product.price;
+                    } else {
+                      const newProduct: OrderProduct = {
+                        productId: product.key,
+                        productName: product.name,
+                        quantity: quantity,
+                        price: product.price,
+                        total: quantity * product.price,
+                      };
+                      updatedProducts = [...selectedProducts, newProduct];
+                    }
+                    
+                    setSelectedProducts(updatedProducts);
+                    const newSubtotal = updatedProducts.reduce((sum, p) => sum + p.total, 0);
+                    const newTotal = newSubtotal - discount;
+                    setSubtotal(newSubtotal);
+                    setTotal(newTotal);
+                    form.setFieldsValue({ selectedProduct: undefined, selectedQuantity: 1 });
+                  }
+                }}
+              >
+                Thêm
+              </Button>
+            </div>
+            
+            {/* Selected Products List */}
+            {selectedProducts.length > 0 && (
+              <div style={{ border: '1px solid #d9d9d9', padding: 8, borderRadius: 6, backgroundColor: '#fafafa' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Sản phẩm đã chọn:</div>
+                {selectedProducts.map((p, idx) => (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                    <span>{p.productName} x{p.quantity}</span>
+                    <div>
+                      <span style={{ marginRight: 8 }}>{p.total.toLocaleString('vi-VN')} VNĐ</span>
+                      <Button 
+                        size="small" 
+                        danger 
+                        type="text"
+                        onClick={() => {
+                          const updatedProducts = selectedProducts.filter(prod => prod.productId !== p.productId);
+                          setSelectedProducts(updatedProducts);
+                          const newSubtotal = updatedProducts.reduce((sum, prod) => sum + prod.total, 0);
+                          const newTotal = newSubtotal - discount;
+                          setSubtotal(newSubtotal);
+                          setTotal(newTotal);
+                        }}
+                      >
+                        Xóa
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Order Details */}
+          <Card title="Chi tiết đơn hàng" size="small" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <Form.Item
+                name="date"
+                label="Ngày"
+                rules={[{ required: true, message: 'Vui lòng chọn ngày!' }]}
+                style={{ flex: 1 }}
+              >
+                <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
+              </Form.Item>
+              <Form.Item
+                name="paymentStatus"
+                label="Trạng thái thanh toán"
+                rules={[{ required: true, message: 'Vui lòng chọn trạng thái thanh toán!' }]}
+                style={{ flex: 1 }}
+              >
+                <Select options={paymentStatusOptions} />
+              </Form.Item>
+            </div>
+            
+            <Form.Item name="note" label="Ghi chú">
+              <Input.TextArea placeholder="Ghi chú thêm (không bắt buộc)" rows={2} />
+            </Form.Item>
+            
+            <Form.Item label="Giảm giá">
+              <InputNumber 
+                min={0} 
+                value={discount}
+                onChange={(value) => {
+                  const discountValue = value || 0;
+                  setDiscount(discountValue);
+                  setTotal(subtotal - discountValue);
+                }}
+                style={{ width: '100%' }} 
+                placeholder="Nhập số tiền giảm giá" 
+                addonAfter="VNĐ"
+              />
+            </Form.Item>
+          </Card>
+
+          {/* Order Summary */}
+          {selectedProducts.length > 0 && (
+            <Card title="Tóm tắt đơn hàng" size="small">
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span>Tạm tính:</span>
+                <span>{subtotal.toLocaleString('vi-VN')} VNĐ</span>
+              </div>
+              {discount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, color: '#52c41a' }}>
+                  <span>Giảm giá:</span>
+                  <span>-{discount.toLocaleString('vi-VN')} VNĐ</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 'bold', borderTop: '1px solid #d9d9d9', paddingTop: 8 }}>
+                <span>Tổng cộng:</span>
+                <span style={{ color: '#1890ff' }}>{total.toLocaleString('vi-VN')} VNĐ</span>
+              </div>
+            </Card>
+          )}
         </Form>
       </Modal>
     </div>
