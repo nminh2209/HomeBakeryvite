@@ -22,6 +22,7 @@ import Supply from './pages/Supply';
 import Suppliers from './pages/Suppliers';
 import Contacts from './pages/Contacts';
 import Ingredients from './pages/Ingredients';
+import IngredientCategories from './pages/IngredientCategories';
 import Products from './pages/Products';
 import ProductCategories from './pages/ProductCategories';
 import Customers from './pages/Customers';
@@ -33,17 +34,16 @@ const { Header, Content, Sider } = Layout;
 const pageMap: Record<string, React.ReactNode> = {
   dashboard: <Dashboard />,
   orders: <Orders />,
+  customers: <Customers />,
+  products: <Products />,
+  productCategories: <ProductCategories />,
+  ingredients: <Ingredients />,
+  ingredientCategories: <IngredientCategories />,
   supply: <Supply />,
   suppliers: <Suppliers />,
   contacts: <Contacts />,
-  customers: <Customers />,
-  ingredients: <Ingredients />,
-  products: <Products />,
-  productCategories: <ProductCategories />,
   billing: <Billing />,
-};
-
-const menuItems: MenuProps['items'] = [
+};const menuItems: MenuProps['items'] = [
   {
     key: 'dashboard',
     icon: <DashboardOutlined />,
@@ -70,6 +70,16 @@ const menuItems: MenuProps['items'] = [
     label: 'Loại sản phẩm',
   },
   {
+    key: 'ingredients',
+    icon: <DropboxOutlined />,
+    label: 'Nguyên liệu',
+  },
+  {
+    key: 'ingredientCategories',
+    icon: <DropboxOutlined />,
+    label: 'Loại nguyên liệu',
+  },
+  {
     key: 'supply',
     icon: <SolutionOutlined />,
     label: 'Cung ứng',
@@ -83,11 +93,6 @@ const menuItems: MenuProps['items'] = [
     key: 'contacts',
     icon: <ContactsOutlined />,
     label: 'Liên hệ',
-  },
-  {
-    key: 'ingredients',
-    icon: <DropboxOutlined />,
-    label: 'Nguyên liệu',
   },
   {
     key: 'billing',

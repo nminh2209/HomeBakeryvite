@@ -1,97 +1,278 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, DatePicker, Popconfirm, message } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { Table, Button, Modal, Form, Input, DatePicker, Popconfirm, message, Select, Card, InputNumber } from 'antd';
+import { PlusOutlined, ShoppingCartOutlined, DollarOutlined, CalendarOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 
-interface SupplyItem {
+interface PurchaseItem {
+  ingredientId: string;
+  ingredientName: string;
+  brand: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  packagingUnit: string;
+  packagingValue: number;
+}
+
+interface SupplyOrder {
   key: string;
-  name: string;
-  date: string;
+  orderDate: string;
+  supplierId: string;
+  supplierName: string;
+  items: PurchaseItem[];
+  subtotal: number;
+  discount: number;
+  totalAmount: number;
+  paymentStatus: 'paid' | 'unpaid' | 'partial';
+  deliveryDate?: string;
   note?: string;
 }
 
+interface Supplier {
+  key: string;
+  name: string;
+  phone: string;
+  address: string;
+}
+
+interface Ingredient {
+  key: string;
+  name: string;
+  brand: string;
+  category: string;
+  packagingValue: number;
+  packagingUnit: string;
+  currentStock: number;
+}
+
+const paymentStatusOptions = [
+  { value: 'unpaid', label: 'Chưa thanh toán' },
+  { value: 'partial', label: 'Thanh toán một phần' },
+  { value: 'paid', label: 'Đã thanh toán' },
+];
+
 const Supply: React.FC = () => {
-  const [supplies, setSupplies] = useState<SupplyItem[]>([]);
+  const [supplyOrders, setSupplyOrders] = useState<SupplyOrder[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingSupply, setEditingSupply] = useState<SupplyItem | null>(null);
+  const [editingOrder, setEditingOrder] = useState<SupplyOrder | null>(null);
   const [form] = Form.useForm();
+  const [selectedItems, setSelectedItems] = useState<PurchaseItem[]>([]);
+  const [subtotal, setSubtotal] = useState(0);
+  const [discount, setDiscount] = useState(0);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    const fetchSupplies = async () => {
-      const querySnapshot = await getDocs(collection(db, 'supplies'));
-      const data: SupplyItem[] = querySnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as SupplyItem));
-      setSupplies(data);
+    const fetchData = async () => {
+      // Fetch supply orders
+      const ordersSnapshot = await getDocs(collection(db, 'supplyOrders'));
+      const ordersData: SupplyOrder[] = ordersSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as SupplyOrder));
+      setSupplyOrders(ordersData);
+      
+      // Fetch suppliers
+      const suppliersSnapshot = await getDocs(collection(db, 'suppliers'));
+      const suppliersData: Supplier[] = suppliersSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Supplier));
+      setSuppliers(suppliersData);
+      
+      // Fetch ingredients
+      const ingredientsSnapshot = await getDocs(collection(db, 'ingredients'));
+      const ingredientsData: Ingredient[] = ingredientsSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Ingredient));
+      setIngredients(ingredientsData);
     };
-    fetchSupplies();
+    fetchData();
   }, []);
 
+  // Calculate totals
+  const calculateTotals = (items: PurchaseItem[], discountValue: number) => {
+    const subtotalValue = items.reduce((sum, item) => sum + item.totalPrice, 0);
+    const totalValue = subtotalValue - discountValue;
+    setSubtotal(subtotalValue);
+    setTotal(totalValue);
+  };
+
+  // Add ingredient to purchase
+  const addIngredientToPurchase = () => {
+    const ingredientId = form.getFieldValue('selectedIngredient');
+    const quantity = form.getFieldValue('selectedQuantity') || 1;
+    const unitPrice = form.getFieldValue('unitPrice') || 0;
+    const ingredient = ingredients.find(ing => ing.key === ingredientId);
+    
+    if (ingredient && quantity > 0 && unitPrice > 0) {
+      const existingIndex = selectedItems.findIndex(item => item.ingredientId === ingredientId);
+      let updatedItems: PurchaseItem[];
+      
+      if (existingIndex >= 0) {
+        updatedItems = [...selectedItems];
+        updatedItems[existingIndex].quantity += quantity;
+        updatedItems[existingIndex].totalPrice = updatedItems[existingIndex].quantity * unitPrice;
+      } else {
+        const newItem: PurchaseItem = {
+          ingredientId: ingredient.key,
+          ingredientName: ingredient.name,
+          brand: ingredient.brand,
+          quantity: quantity,
+          unitPrice: unitPrice,
+          totalPrice: quantity * unitPrice,
+          packagingUnit: ingredient.packagingUnit,
+          packagingValue: ingredient.packagingValue,
+        };
+        updatedItems = [...selectedItems, newItem];
+      }
+      
+      setSelectedItems(updatedItems);
+      calculateTotals(updatedItems, discount);
+      form.setFieldsValue({ selectedIngredient: undefined, selectedQuantity: 1, unitPrice: 0 });
+    }
+  };
+
+  // Remove item from purchase
+  const removeItemFromPurchase = (ingredientId: string) => {
+    const updatedItems = selectedItems.filter(item => item.ingredientId !== ingredientId);
+    setSelectedItems(updatedItems);
+    calculateTotals(updatedItems, discount);
+  };
+
   const handleAdd = () => {
-    setEditingSupply(null);
+    setEditingOrder(null);
+    setSelectedItems([]);
+    setSubtotal(0);
+    setDiscount(0);
+    setTotal(0);
     form.resetFields();
     setIsModalOpen(true);
   };
 
-  const handleEdit = (record: SupplyItem) => {
-    setEditingSupply(record);
-    form.setFieldsValue({ ...record, date: dayjs(record.date) });
+  const handleEdit = (record: SupplyOrder) => {
+    setEditingOrder(record);
+    setSelectedItems(record.items || []);
+    setSubtotal(record.subtotal || 0);
+    setDiscount(record.discount || 0);
+    setTotal(record.totalAmount || 0);
+    form.setFieldsValue({ 
+      ...record, 
+      orderDate: dayjs(record.orderDate),
+      deliveryDate: record.deliveryDate ? dayjs(record.deliveryDate) : null,
+    });
     setIsModalOpen(true);
   };
 
   const handleDelete = async (key: string) => {
-    await deleteDoc(doc(db, 'supplies', key));
-    setSupplies(supplies.filter((item) => item.key !== key));
-    message.success('Đã xóa cung ứng!');
+    await deleteDoc(doc(db, 'supplyOrders', key));
+    setSupplyOrders(supplyOrders.filter((item) => item.key !== key));
+    message.success('Đã xóa đơn mua hàng!');
   };
 
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
-      const supplyData = { ...values, date: values.date.format('YYYY-MM-DD') };
-      if (editingSupply) {
-        await updateDoc(doc(db, 'supplies', editingSupply.key), supplyData);
-        setSupplies(supplies.map((item) => item.key === editingSupply.key ? { ...editingSupply, ...supplyData } : item));
-        message.success('Đã cập nhật cung ứng!');
+      if (selectedItems.length === 0) {
+        message.error('Vui lòng chọn ít nhất một nguyên liệu!');
+        return;
+      }
+      
+      const supplier = suppliers.find(s => s.key === values.supplierId);
+      const orderData: Omit<SupplyOrder, 'key'> = {
+        orderDate: values.orderDate.format('YYYY-MM-DD'),
+        supplierId: values.supplierId,
+        supplierName: supplier?.name || '',
+        items: selectedItems,
+        subtotal: subtotal,
+        discount: discount,
+        totalAmount: total,
+        paymentStatus: values.paymentStatus,
+        deliveryDate: values.deliveryDate ? values.deliveryDate.format('YYYY-MM-DD') : undefined,
+        note: values.note || '',
+      };
+      
+      if (editingOrder) {
+        await updateDoc(doc(db, 'supplyOrders', editingOrder.key), orderData);
+        setSupplyOrders(supplyOrders.map((item) => item.key === editingOrder.key ? { ...editingOrder, ...orderData } : item));
+        message.success('Đã cập nhật đơn mua hàng!');
       } else {
-        const docRef = await addDoc(collection(db, 'supplies'), supplyData);
-        setSupplies([...supplies, { ...supplyData, key: docRef.id }]);
-        message.success('Đã thêm cung ứng!');
+        const docRef = await addDoc(collection(db, 'supplyOrders'), orderData);
+        setSupplyOrders([...supplyOrders, { ...orderData, key: docRef.id }]);
+        message.success('Đã thêm đơn mua hàng!');
       }
       setIsModalOpen(false);
       form.resetFields();
+      setSelectedItems([]);
+      setSubtotal(0);
+      setDiscount(0);
+      setTotal(0);
     } catch (err) {
-      message.error('Lỗi khi lưu cung ứng!');
+      message.error('Lỗi khi lưu đơn mua hàng!');
     }
   };
 
   const columns = [
     {
-      title: 'Tên cung ứng',
-      dataIndex: 'name',
-      key: 'name',
+      title: 'Thông tin đơn hàng',
+      key: 'orderInfo',
+      render: (_: any, record: SupplyOrder) => (
+        <div>
+          <div style={{ fontWeight: 'bold', marginBottom: 4 }}>
+            <CalendarOutlined /> {record.orderDate}
+          </div>
+          <div style={{ fontSize: 12, color: '#666' }}>
+            Nhà CC: {record.supplierName}
+          </div>
+        </div>
+      ),
     },
     {
-      title: 'Ngày',
-      dataIndex: 'date',
-      key: 'date',
+      title: 'Nguyên liệu',
+      dataIndex: 'items',
+      key: 'items',
+      render: (items: PurchaseItem[]) => (
+        <div>
+          {items?.map((item, idx) => (
+            <div key={idx} style={{ fontSize: 12, marginBottom: 2 }}>
+              {item.ingredientName} ({item.brand}) x{item.quantity}
+            </div>
+          ))}
+        </div>
+      ),
     },
     {
-      title: 'Ghi chú',
-      dataIndex: 'note',
-      key: 'note',
+      title: 'Tổng tiền',
+      key: 'total',
+      render: (_: any, record: SupplyOrder) => (
+        <div>
+          <div><strong>{record.totalAmount?.toLocaleString('vi-VN')} VNĐ</strong></div>
+          {record.discount > 0 && (
+            <div style={{ fontSize: 11, color: '#666' }}>Giảm: {record.discount?.toLocaleString('vi-VN')} VNĐ</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      title: 'Trạng thái TT',
+      dataIndex: 'paymentStatus',
+      key: 'paymentStatus',
+      render: (status: string) => {
+        const option = paymentStatusOptions.find(opt => opt.value === status);
+        const colors: Record<string, string> = {
+          paid: '#52c41a',
+          partial: '#faad14',
+          unpaid: '#f5222d'
+        };
+        return <span style={{ color: colors[status] }}><DollarOutlined /> {option?.label}</span>;
+      },
     },
     {
       title: 'Hành động',
       key: 'action',
-      render: (_: any, record: SupplyItem) => (
+      render: (_: any, record: SupplyOrder) => (
         <>
           <Button type="link" onClick={() => handleEdit(record)}>
             Sửa
           </Button>
-          <Popconfirm title="Xóa cung ứng này?" onConfirm={() => handleDelete(record.key)} okText="Xóa" cancelText="Hủy">
+          <Popconfirm title="Xóa đơn mua hàng này?" onConfirm={() => handleDelete(record.key)} okText="Xóa" cancelText="Hủy">
             <Button type="link" danger>
               Xóa
             </Button>
@@ -103,37 +284,180 @@ const Supply: React.FC = () => {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', padding: '2vw' }}>
-      <h2>Quản lý cung ứng</h2>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+        <ShoppingCartOutlined style={{ fontSize: 24, marginRight: 8 }} />
+        <h2 style={{ margin: 0 }}>Cung ứng</h2>
+      </div>
+      
+      <Card style={{ marginBottom: 16 }}>
+        <p><strong>Chức năng:</strong> Quản lý đơn mua, 1 lần mua bao gồm nhiều nguyên liệu và từ nhà cung cấp khác nhau</p>
+        <p><strong>Tính năng mới:</strong></p>
+        <ul>
+          <li>Mua nhiều nguyên liệu từ một nhà cung cấp trong 1 đơn</li>
+          <li>Tính toán đơn giá cho từng đơn vị cơ bản để so sánh</li>
+          <li>Theo dõi biến động giá theo thời gian</li>
+          <li>Quản lý thanh toán và giao hàng</li>
+        </ul>
+      </Card>
+
       <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{ marginBottom: 16 }}>
-        Thêm cung ứng
+        Thêm đơn mua hàng
       </Button>
-      <Table columns={columns} dataSource={supplies} pagination={{ pageSize: 5 }} />
+      
+      <Table columns={columns} dataSource={supplyOrders} pagination={{ pageSize: 5 }} />
+      
       <Modal
-        title={editingSupply ? 'Cập nhật cung ứng' : 'Thêm cung ứng'}
+        title={editingOrder ? 'Cập nhật đơn mua hàng' : 'Thêm đơn mua hàng'}
         open={isModalOpen}
         onOk={handleOk}
         onCancel={() => setIsModalOpen(false)}
         okText="Lưu"
         cancelText="Hủy"
+        width={800}
       >
         <Form form={form} layout="vertical">
-          <Form.Item
-            name="name"
-            label="Tên cung ứng"
-            rules={[{ required: true, message: 'Vui lòng nhập tên cung ứng!' }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item
-            name="date"
-            label="Ngày"
-            rules={[{ required: true, message: 'Vui lòng chọn ngày!' }]}
-          >
-            <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
-          </Form.Item>
-          <Form.Item name="note" label="Ghi chú">
-            <Input />
-          </Form.Item>
+          {/* Order Information */}
+          <Card title="Thông tin đơn hàng" size="small" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <Form.Item
+                name="orderDate"
+                label="Ngày đặt hàng"
+                rules={[{ required: true, message: 'Vui lòng chọn ngày đặt hàng!' }]}
+                style={{ flex: 1 }}
+              >
+                <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
+              </Form.Item>
+              <Form.Item
+                name="supplierId"
+                label="Nhà cung cấp"
+                rules={[{ required: true, message: 'Vui lòng chọn nhà cung cấp!' }]}
+                style={{ flex: 1 }}
+              >
+                <Select 
+                  placeholder="Chọn nhà cung cấp"
+                  options={suppliers.map(sup => ({
+                    value: sup.key, 
+                    label: `${sup.name} - ${sup.phone}`
+                  }))}
+                />
+              </Form.Item>
+            </div>
+          </Card>
+
+          {/* Ingredient Selection */}
+          <Card title="Chọn nguyên liệu" size="small" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <Form.Item name="selectedIngredient" style={{ flex: 2, marginBottom: 0 }}>
+                <Select 
+                  placeholder="Chọn nguyên liệu"
+                  options={ingredients.map(ing => ({
+                    value: ing.key, 
+                    label: `${ing.name} (${ing.brand}) - ${ing.packagingValue}${ing.packagingUnit}`
+                  }))}
+                />
+              </Form.Item>
+              <Form.Item name="selectedQuantity" style={{ width: 80, marginBottom: 0 }}>
+                <InputNumber min={1} defaultValue={1} placeholder="SL" />
+              </Form.Item>
+              <Form.Item name="unitPrice" style={{ width: 120, marginBottom: 0 }}>
+                <InputNumber min={0} placeholder="Đơn giá" />
+              </Form.Item>
+              <Button type="primary" onClick={addIngredientToPurchase}>
+                Thêm
+              </Button>
+            </div>
+            
+            {/* Selected Items List */}
+            {selectedItems.length > 0 && (
+              <div style={{ border: '1px solid #d9d9d9', padding: 8, borderRadius: 6, backgroundColor: '#fafafa' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Nguyên liệu đã chọn:</div>
+                {selectedItems.map((item, idx) => {
+                  const unitBasePrice = item.packagingValue > 0 ? item.unitPrice / item.packagingValue : 0;
+                  return (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid #f0f0f0' }}>
+                      <div>
+                        <div><strong>{item.ingredientName}</strong> ({item.brand})</div>
+                        <div style={{ fontSize: 11, color: '#666' }}>
+                          {item.quantity} x {item.unitPrice.toLocaleString('vi-VN')} VNĐ = {item.totalPrice.toLocaleString('vi-VN')} VNĐ
+                        </div>
+                        <div style={{ fontSize: 10, color: '#999' }}>
+                          Đơn giá/đvt: {unitBasePrice.toLocaleString('vi-VN', { maximumFractionDigits: 2 })} VNĐ
+                        </div>
+                      </div>
+                      <Button 
+                        size="small" 
+                        danger 
+                        type="text"
+                        onClick={() => removeItemFromPurchase(item.ingredientId)}
+                      >
+                        Xóa
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+
+          {/* Payment & Delivery */}
+          <Card title="Thanh toán & Giao hàng" size="small" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <Form.Item
+                name="paymentStatus"
+                label="Trạng thái thanh toán"
+                rules={[{ required: true, message: 'Vui lòng chọn trạng thái thanh toán!' }]}
+                style={{ flex: 1 }}
+              >
+                <Select options={paymentStatusOptions} />
+              </Form.Item>
+              <Form.Item
+                name="deliveryDate"
+                label="Ngày giao hàng dự kiến"
+                style={{ flex: 1 }}
+              >
+                <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
+              </Form.Item>
+            </div>
+            
+            <Form.Item name="note" label="Ghi chú">
+              <Input.TextArea placeholder="Ghi chú thêm về đơn hàng (không bắt buộc)" rows={2} />
+            </Form.Item>
+            
+            <Form.Item label="Giảm giá">
+              <InputNumber 
+                min={0} 
+                value={discount}
+                onChange={(value) => {
+                  const discountValue = value || 0;
+                  setDiscount(discountValue);
+                  setTotal(subtotal - discountValue);
+                }}
+                style={{ width: '100%' }} 
+                placeholder="Nhập số tiền giảm giá" 
+                addonAfter="VNĐ"
+              />
+            </Form.Item>
+          </Card>
+
+          {/* Order Summary */}
+          {selectedItems.length > 0 && (
+            <Card title="Tóm tắt đơn hàng" size="small">
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span>Tạm tính:</span>
+                <span>{subtotal.toLocaleString('vi-VN')} VNĐ</span>
+              </div>
+              {discount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, color: '#52c41a' }}>
+                  <span>Giảm giá:</span>
+                  <span>-{discount.toLocaleString('vi-VN')} VNĐ</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 'bold', borderTop: '1px solid #d9d9d9', paddingTop: 8 }}>
+                <span>Tổng cộng:</span>
+                <span style={{ color: '#1890ff' }}>{total.toLocaleString('vi-VN')} VNĐ</span>
+              </div>
+            </Card>
+          )}
         </Form>
       </Modal>
     </div>
