@@ -33,15 +33,26 @@ const Products: React.FC = () => {
   // Load products and categories from Firestore
   useEffect(() => {
     const fetchData = async () => {
-      // Fetch products
-      const productsSnapshot = await getDocs(collection(db, 'products'));
-      const productsData: Product[] = productsSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Product));
-      setProducts(productsData);
-      
-      // Fetch categories
-      const categoriesSnapshot = await getDocs(collection(db, 'productCategories'));
-      const categoriesData: ProductCategory[] = categoriesSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as ProductCategory));
-      setCategories(categoriesData);
+      try {
+        // Fetch products
+        const productsSnapshot = await getDocs(collection(db, 'products'));
+        const productsData: Product[] = productsSnapshot.docs.map(doc => ({ 
+          key: doc.id, 
+          ...doc.data() 
+        } as Product));
+        setProducts(productsData);
+        
+        // Fetch categories
+        const categoriesSnapshot = await getDocs(collection(db, 'productCategories'));
+        const categoriesData: ProductCategory[] = categoriesSnapshot.docs.map(doc => ({ 
+          key: doc.id, 
+          ...doc.data() 
+        } as ProductCategory));
+        setCategories(categoriesData);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        message.error('Lỗi khi tải dữ liệu!');
+      }
     };
     fetchData();
   }, []);
@@ -62,25 +73,33 @@ const Products: React.FC = () => {
 
   const handleEdit = (record: Product) => {
     setEditingProduct(record);
-    form.setFieldsValue(record);
+    // Set form fields without the image field for editing
+    const { image, ...otherFields } = record;
+    form.setFieldsValue(otherFields);
     setIsModalOpen(true);
   };
 
   const handleDelete = async (key: string) => {
-    await deleteDoc(doc(db, 'products', key));
-    setProducts(products.filter((item) => item.key !== key));
-    message.success('Đã xóa sản phẩm!');
+    try {
+      await deleteDoc(doc(db, 'products', key));
+      setProducts(products.filter((item) => item.key !== key));
+      message.success('Đã xóa sản phẩm!');
+    } catch (err) {
+      console.error('Error deleting product:', err);
+      message.error('Lỗi khi xóa sản phẩm!');
+    }
   };
 
   const handleOk = async () => {
     try {
       setUploading(true);
       const values = await form.validateFields();
-      let imageUrl = values.image;
+      let imageUrl = editingProduct?.image || '';
+      
       // Nếu có file ảnh mới upload
       if (values.image && values.image[0]?.originFileObj) {
         const file = values.image[0].originFileObj;
-  imageUrl = await uploadToCloudinary(file);
+        imageUrl = await uploadToCloudinary(file);
       }
       const selectedCategory = categories.find(cat => cat.key === values.category);
       const productCode = editingProduct ? editingProduct.productCode : generateProductCode(
@@ -95,9 +114,12 @@ const Products: React.FC = () => {
         category: values.category,
         productCode: productCode,
       };
+      
       if (editingProduct) {
         await updateDoc(doc(db, 'products', editingProduct.key), productData);
-        setProducts(products.map((item) => item.key === editingProduct.key ? { ...editingProduct, ...productData } : item));
+        setProducts(products.map((item) => 
+          item.key === editingProduct.key ? { ...editingProduct, ...productData } : item
+        ));
         message.success('Đã cập nhật sản phẩm!');
       } else {
         const docRef = await addDoc(collection(db, 'products'), productData);
@@ -107,9 +129,11 @@ const Products: React.FC = () => {
       setIsModalOpen(false);
       form.resetFields();
     } catch (err) {
-      message.error('Lỗi khi lưu sản phẩm!');
+      console.error('Error saving product:', err);
+      message.error(`Lỗi khi lưu sản phẩm: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   const columns = [
