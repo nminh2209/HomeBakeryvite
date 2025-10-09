@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, Upload, message, Popconfirm, Select, Card } from 'antd';
 import { PlusOutlined, UploadOutlined, AppstoreOutlined, TagOutlined } from '@ant-design/icons';
@@ -94,12 +92,15 @@ const Products: React.FC = () => {
     try {
       setUploading(true);
       const values = await form.validateFields();
+      console.log('Products.handleOk - form values:', values);
       let imageUrl = editingProduct?.image || '';
       
       // Nếu có file ảnh mới upload
       if (values.image && values.image[0]?.originFileObj) {
         const file = values.image[0].originFileObj;
+        console.log('Products.handleOk - uploading file', file.name, file.size);
         imageUrl = await uploadToCloudinary(file);
+        console.log('Products.handleOk - uploaded imageUrl:', imageUrl);
       }
       const selectedCategory = categories.find(cat => cat.key === values.category);
       const productCode = editingProduct ? editingProduct.productCode : generateProductCode(
@@ -114,6 +115,8 @@ const Products: React.FC = () => {
         category: values.category,
         productCode: productCode,
       };
+
+      console.log('Products.handleOk - productData prepared:', productData);
       
       if (editingProduct) {
         await updateDoc(doc(db, 'products', editingProduct.key), productData);
@@ -130,7 +133,17 @@ const Products: React.FC = () => {
       form.resetFields();
     } catch (err) {
       console.error('Error saving product:', err);
-      message.error(`Lỗi khi lưu sản phẩm: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      const errorMessage = err instanceof Error ? err.message : JSON.stringify(err);
+      Modal.error({
+        title: 'Lỗi khi lưu sản phẩm',
+        content: (
+          <div>
+            <p>{errorMessage}</p>
+            <pre style={{ whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto' }}>{String(err)}</pre>
+          </div>
+        ),
+      });
+      message.error(`Lỗi khi lưu sản phẩm: ${errorMessage}`);
     } finally {
       setUploading(false);
     }
