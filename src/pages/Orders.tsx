@@ -41,6 +41,7 @@ interface Product {
   key: string;
   name: string;
   price: number;
+  image?: string;
   category: string;
   productCode: string;
 }

@@ -47,6 +47,9 @@ interface Ingredient {
   packagingValue: number;
   packagingUnit: string;
   currentStock: number;
+  lastPurchaseDate?: string;
+  lastUnitPrice?: number;
+  note?: string;
 }
 
 const paymentStatusOptions = [
