@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, DatePicker, Select, Popconfirm, message, Card } from 'antd';
-import { PlusOutlined, PhoneOutlined, UserOutlined, ShoppingCartOutlined, MoneyCollectOutlined } from '@ant-design/icons';
+import { PlusOutlined, PhoneOutlined, UserOutlined, ShoppingCartOutlined, MoneyCollectOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
@@ -62,6 +62,103 @@ const Orders: React.FC = () => {
   const [subtotal, setSubtotal] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [total, setTotal] = useState(0);
+  const [searchText, setSearchText] = useState('');
+
+  // Filter orders based on search text
+  const filteredOrders = orders.filter(order =>
+    order.customer.toLowerCase().includes(searchText.toLowerCase()) ||
+    order.customerPhone.includes(searchText) ||
+    order.products?.some(p => p.productName.toLowerCase().includes(searchText.toLowerCase())) ||
+    order.date.includes(searchText) ||
+    (order.note && order.note.toLowerCase().includes(searchText.toLowerCase()))
+  );
+
+  // Function to migrate existing customers from orders
+  const migrateExistingCustomers = async () => {
+    try {
+      message.loading('Đang chuyển đổi khách hàng hiện tại...', 0);
+      
+      // Get all orders
+      const ordersSnapshot = await getDocs(collection(db, 'orders'));
+      const allOrders: Order[] = ordersSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Order));
+      
+      // Get existing customers to avoid duplicates
+      const customersSnapshot = await getDocs(collection(db, 'customers'));
+      const existingCustomers: Customer[] = customersSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Customer));
+      const existingPhones = existingCustomers.map(c => c.phone);
+      
+      // Extract unique customers from orders
+      const customerMap = new Map<string, {name: string; phone: string; address: string; orderDates: string[]}>();
+      
+      allOrders.forEach(order => {
+        if (order.customer && order.customerPhone) {
+          const phone = order.customerPhone;
+          const existing = customerMap.get(phone);
+          
+          if (existing) {
+            // Add this order date to existing customer
+            existing.orderDates.push(order.date);
+            // Update address if this order has a more recent address
+            if (order.customerAddress) {
+              existing.address = order.customerAddress;
+            }
+          } else {
+            // New customer
+            customerMap.set(phone, {
+              name: order.customer,
+              phone: phone,
+              address: order.customerAddress || 'Chưa có địa chỉ',
+              orderDates: [order.date]
+            });
+          }
+        }
+      });
+      
+      // Save new customers to Firebase
+      let newCustomersCount = 0;
+      let updatedCustomersCount = 0;
+      
+      for (const [phone, customerInfo] of customerMap) {
+        if (!existingPhones.includes(phone)) {
+          // New customer - save to database
+          const customerDoc = {
+            name: customerInfo.name,
+            phone: customerInfo.phone,
+            address: customerInfo.address,
+            purchaseHistory: `Đơn hàng: ${customerInfo.orderDates.sort().join(', ')}`,
+          };
+          
+          await addDoc(collection(db, 'customers'), customerDoc);
+          console.log(`Saved customer: ${customerInfo.name} (${phone})`);
+          newCustomersCount++;
+        } else {
+          // Customer exists - update their purchase history
+          const existingCustomer = existingCustomers.find(c => c.phone === phone);
+          if (existingCustomer) {
+            const updatedHistory = `${existingCustomer.purchaseHistory || ''}, ${customerInfo.orderDates.join(', ')}`;
+            await updateDoc(doc(db, 'customers', existingCustomer.key), {
+              purchaseHistory: updatedHistory,
+              address: customerInfo.address, // Update address to latest
+            });
+            updatedCustomersCount++;
+          }
+        }
+      }
+      
+      // Refresh the customer list
+      const refreshedCustomersSnapshot = await getDocs(collection(db, 'customers'));
+      const refreshedCustomersData: Customer[] = refreshedCustomersSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Customer));
+      setCustomers(refreshedCustomersData);
+      
+      message.destroy(); // Clear loading message
+      message.success(`🎉 Hoàn thành! Đã thêm ${newCustomersCount} khách hàng mới và cập nhật ${updatedCustomersCount} khách hàng hiện tại từ ${allOrders.length} đơn hàng!`, 8);
+      
+    } catch (error) {
+      message.destroy();
+      console.error('Error migrating customers:', error);
+      message.error(`❌ Lỗi khi chuyển đổi khách hàng: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -114,6 +211,58 @@ const Orders: React.FC = () => {
     message.success('Đã xóa đơn hàng!');
   };
 
+  // Helper function to save customer if they don't exist
+  const saveCustomerIfNew = async (customerData: { name: string; phone: string; address: string }) => {
+    try {
+      console.log('Attempting to save customer:', customerData);
+      
+      // Check if customer already exists by phone number
+      const existingCustomer = customers.find(c => c.phone === customerData.phone);
+      console.log('Existing customer found:', existingCustomer);
+      
+      if (!existingCustomer) {
+        // Customer doesn't exist, save to customers collection
+        const customerDoc = {
+          name: customerData.name,
+          phone: customerData.phone,
+          address: customerData.address,
+          purchaseHistory: `Đơn hàng đầu tiên: ${dayjs().format('YYYY-MM-DD')}`,
+        };
+        
+        console.log('Saving new customer to Firebase:', customerDoc);
+        const docRef = await addDoc(collection(db, 'customers'), customerDoc);
+        console.log('Customer saved with ID:', docRef.id);
+        
+        // Update local customers state
+        setCustomers([...customers, { ...customerDoc, key: docRef.id }]);
+        
+        message.success(`✅ Đã lưu khách hàng mới: ${customerData.name} vào "Quản lí khách hàng"! Hãy kiểm tra tab "Quản lí khách hàng" hoặc nhấn "Làm mới".`, 6);
+      } else {
+        // Customer exists, optionally update their purchase history
+        const updatedHistory = existingCustomer.purchaseHistory 
+          ? existingCustomer.purchaseHistory + `, ${dayjs().format('YYYY-MM-DD')}`
+          : `Đơn hàng: ${dayjs().format('YYYY-MM-DD')}`;
+        
+        await updateDoc(doc(db, 'customers', existingCustomer.key), {
+          address: customerData.address, // Update address in case it changed
+          purchaseHistory: updatedHistory,
+        });
+        
+        // Update local state
+        setCustomers(customers.map(c => 
+          c.key === existingCustomer.key 
+            ? { ...c, address: customerData.address, purchaseHistory: updatedHistory }
+            : c
+        ));
+        
+        message.info(`📝 Đã cập nhật lịch sử mua hàng cho khách hàng: ${customerData.name}`);
+      }
+    } catch (error) {
+      console.error('Error saving customer:', error);
+      message.error(`❌ Lỗi khi lưu khách hàng: ${error instanceof Error ? error.message : 'Unknown error'}. Đơn hàng vẫn được tạo thành công.`);
+    }
+  };
+
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
@@ -122,9 +271,18 @@ const Orders: React.FC = () => {
         return;
       }
       
+      // Normalize phone number
+      const normalizedPhone = values.customerPhone.replace(/[\s\-\(\)]/g, '');
+      let finalPhone = normalizedPhone;
+      if (finalPhone.startsWith('+84')) {
+        finalPhone = '0' + finalPhone.slice(3);
+      } else if (finalPhone.startsWith('84')) {
+        finalPhone = '0' + finalPhone.slice(2);
+      }
+      
       const orderData: Omit<Order, 'key'> = {
         customer: values.customer,
-        customerPhone: values.customerPhone,
+        customerPhone: finalPhone,
         customerAddress: values.customerAddress,
         products: selectedProducts,
         subtotal: subtotal,
@@ -135,6 +293,15 @@ const Orders: React.FC = () => {
         note: values.note || '',
       };
       
+      // Save customer information automatically (only for new orders, not edits)
+      if (!editingOrder) {
+        await saveCustomerIfNew({
+          name: values.customer,
+          phone: finalPhone,
+          address: values.customerAddress,
+        });
+      }
+      
       if (editingOrder) {
         await updateDoc(doc(db, 'orders', editingOrder.key), orderData);
         setOrders(orders.map((item) => item.key === editingOrder.key ? { ...editingOrder, ...orderData } : item));
@@ -142,7 +309,7 @@ const Orders: React.FC = () => {
       } else {
         const docRef = await addDoc(collection(db, 'orders'), orderData);
         setOrders([...orders, { ...orderData, key: docRef.id }]);
-        message.success('Đã thêm đơn hàng!');
+        message.success('Đã thêm đơn hàng và lưu thông tin khách hàng!');
       }
       setIsModalOpen(false);
       form.resetFields();
@@ -160,6 +327,7 @@ const Orders: React.FC = () => {
       title: 'Khách hàng',
       dataIndex: 'customer',
       key: 'customer',
+      sorter: (a: Order, b: Order) => a.customer.localeCompare(b.customer),
       render: (text: string, record: Order) => (
         <div>
           <div><UserOutlined /> {text}</div>
@@ -171,6 +339,11 @@ const Orders: React.FC = () => {
       title: 'Sản phẩm',
       dataIndex: 'products',
       key: 'products',
+      sorter: (a: Order, b: Order) => {
+        const aProducts = a.products?.map(p => p.productName).join(', ') || '';
+        const bProducts = b.products?.map(p => p.productName).join(', ') || '';
+        return aProducts.localeCompare(bProducts);
+      },
       render: (products: OrderProduct[]) => (
         <div>
           {products?.map((p, idx) => (
@@ -185,6 +358,8 @@ const Orders: React.FC = () => {
       title: 'Tổng tiền',
       dataIndex: 'total',
       key: 'total',
+      sorter: (a: Order, b: Order) => (a.total || 0) - (b.total || 0),
+      defaultSortOrder: 'descend' as const,
       render: (total: number, record: Order) => (
         <div>
           <div><strong>{total?.toLocaleString('vi-VN')} VNĐ</strong></div>
@@ -198,11 +373,19 @@ const Orders: React.FC = () => {
       title: 'Ngày',
       dataIndex: 'date',
       key: 'date',
+      sorter: (a: Order, b: Order) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      defaultSortOrder: 'descend' as const,
     },
     {
       title: 'Thanh toán',
       dataIndex: 'paymentStatus',
       key: 'paymentStatus',
+      sorter: (a: Order, b: Order) => a.paymentStatus.localeCompare(b.paymentStatus),
+      filters: [
+        { text: 'Đã thanh toán', value: 'paid' },
+        { text: 'Chưa thanh toán', value: 'unpaid' },
+      ],
+      onFilter: (value: any, record: Order) => record.paymentStatus === value,
       render: (status: string) => {
         const option = paymentStatusOptions.find(opt => opt.value === status);
         const color = status === 'paid' ? '#52c41a' : '#f5222d';
@@ -237,17 +420,44 @@ const Orders: React.FC = () => {
       <Card style={{ marginBottom: 16 }}>
         <p><strong>Tính năng mới:</strong></p>
         <ul>
-          <li>Tự động điền thông tin khi nhập số điện thoại khách hàng cũ</li>
-          <li>Cho phép chọn nhiều sản phẩm với số lượng khác nhau</li>
-          <li>Tính toán tự động: tạm tính, giảm giá, tổng tiền</li>
-          <li>Trạng thái thanh toán: đã thanh toán / chưa thanh toán</li>
+          <li>✅ <strong>Tự động lưu khách hàng:</strong> Khách hàng mới sẽ được tự động thêm vào "Quản lí khách hàng"</li>
+          <li>📞 Tự động điền thông tin khi nhập số điện thoại khách hàng cũ</li>
+          <li>🛒 Cho phép chọn nhiều sản phẩm với số lượng khác nhau</li>
+          <li>💰 Tính toán tự động: tạm tính, giảm giá, tổng tiền</li>
+          <li>💳 Trạng thái thanh toán: đã thanh toán / chưa thanh toán</li>
         </ul>
+        <p><strong>🔄 Chuyển đổi khách hàng hiện tại:</strong> Nhấn nút "Chuyển đổi khách hàng hiện tại" để tự động thêm tất cả khách hàng từ các đơn hàng cũ vào danh sách "Quản lí khách hàng".</p>
       </Card>
 
-      <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{ marginBottom: 16 }}>
-        Thêm đơn hàng
-      </Button>
-      <Table columns={columns} dataSource={orders} pagination={{ pageSize: 5 }} />
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+          Thêm đơn hàng
+        </Button>
+        <Button 
+          onClick={migrateExistingCustomers}
+          style={{ backgroundColor: '#52c41a', borderColor: '#52c41a', color: 'white' }}
+        >
+          🔄 Chuyển đổi khách hàng hiện tại
+        </Button>
+        <Input
+          placeholder="🔍 Tìm kiếm theo tên khách hàng, số điện thoại, sản phẩm, ngày..."
+          prefix={<SearchOutlined />}
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          style={{ width: 350, maxWidth: '100%' }}
+          allowClear
+        />
+      </div>
+      <Table 
+        columns={columns} 
+        dataSource={filteredOrders} 
+        pagination={{ 
+          pageSize: 10, 
+          showSizeChanger: true, 
+          showQuickJumper: true,
+          showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} đơn hàng`
+        }} 
+      />
       <Modal
         title={editingOrder ? 'Cập nhật đơn hàng' : 'Thêm đơn hàng'}
         open={isModalOpen}
@@ -259,7 +469,18 @@ const Orders: React.FC = () => {
       >
         <Form form={form} layout="vertical">
           {/* Customer Information */}
-          <Card title="Thông tin khách hàng" size="small" style={{ marginBottom: 16 }}>
+          <Card 
+            title="Thông tin khách hàng" 
+            size="small" 
+            style={{ marginBottom: 16 }}
+            extra={
+              !editingOrder && (
+                <span style={{ fontSize: 12, color: '#52c41a' }}>
+                  ✅ Khách hàng mới sẽ được tự động lưu vào danh sách
+                </span>
+              )
+            }
+          >
             <Form.Item
               name="customerPhone"
               label="Số điện thoại"

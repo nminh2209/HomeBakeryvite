@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, Popconfirm, message, Card } from 'antd';
-import { PlusOutlined, UserOutlined, PhoneOutlined, HomeOutlined, HistoryOutlined } from '@ant-design/icons';
+import { PlusOutlined, UserOutlined, PhoneOutlined, HomeOutlined, HistoryOutlined, SearchOutlined } from '@ant-design/icons';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 
@@ -28,6 +28,15 @@ const Customers: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [form] = Form.useForm();
+  const [searchText, setSearchText] = useState('');
+
+  // Filter customers based on search text
+  const filteredCustomers = customers.filter(customer =>
+    customer.name.toLowerCase().includes(searchText.toLowerCase()) ||
+    customer.phone.includes(searchText) ||
+    customer.address.toLowerCase().includes(searchText.toLowerCase()) ||
+    (customer.purchaseHistory && customer.purchaseHistory.toLowerCase().includes(searchText.toLowerCase()))
+  );
 
   useEffect(() => {
     const fetchCustomers = async () => {
@@ -36,6 +45,11 @@ const Customers: React.FC = () => {
       setCustomers(data);
     };
     fetchCustomers();
+    
+    // Set up a refresh interval to check for new customers added from other pages
+    const refreshInterval = setInterval(fetchCustomers, 5000); // Refresh every 5 seconds
+    
+    return () => clearInterval(refreshInterval);
   }, []);
 
   const handleAdd = () => {
@@ -85,6 +99,8 @@ const Customers: React.FC = () => {
       title: 'Tên khách hàng',
       dataIndex: 'name',
       key: 'name',
+      sorter: (a: Customer, b: Customer) => a.name.localeCompare(b.name),
+      defaultSortOrder: 'ascend' as const,
       render: (text: string) => (
         <span>
           <UserOutlined style={{ marginRight: 8 }} />
@@ -96,6 +112,7 @@ const Customers: React.FC = () => {
       title: 'Số điện thoại',
       dataIndex: 'phone',
       key: 'phone',
+      sorter: (a: Customer, b: Customer) => a.phone.localeCompare(b.phone),
       render: (text: string) => (
         <span>
           <PhoneOutlined style={{ marginRight: 8 }} />
@@ -107,6 +124,7 @@ const Customers: React.FC = () => {
       title: 'Địa chỉ',
       dataIndex: 'address',
       key: 'address',
+      sorter: (a: Customer, b: Customer) => a.address.localeCompare(b.address),
       render: (text: string) => (
         <span>
           <HomeOutlined style={{ marginRight: 8 }} />
@@ -118,6 +136,7 @@ const Customers: React.FC = () => {
       title: 'Lịch sử mua hàng',
       dataIndex: 'purchaseHistory',
       key: 'purchaseHistory',
+      sorter: (a: Customer, b: Customer) => (a.purchaseHistory || '').localeCompare(b.purchaseHistory || ''),
       render: (text: string) => (
         <span>
           <HistoryOutlined style={{ marginRight: 8 }} />
@@ -152,14 +171,44 @@ const Customers: React.FC = () => {
       
       <Card style={{ marginBottom: 16 }}>
         <p><strong>Chức năng:</strong> Quản lý, chỉnh sửa thông tin khách hàng</p>
-        <p><strong>Lưu ý:</strong> Số điện thoại được chuẩn hóa (bắt đầu bằng 0, không cần +84)</p>
+        <p><strong>Tính năng tự động:</strong> Khách hàng sẽ được tự động thêm vào đây khi tạo đơn hàng mới</p>
+        <p><strong>Lưu ý:</strong> Số điện thoại được chuẩn hóa (bắt đầu bằng 0, không cần +84). Nhấn "Làm mới" để cập nhật danh sách.</p>
       </Card>
 
-      <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{ marginBottom: 16 }}>
-        Thêm khách hàng
-      </Button>
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+          Thêm khách hàng
+        </Button>
+        <Button 
+          onClick={async () => {
+            const querySnapshot = await getDocs(collection(db, 'customers'));
+            const data: Customer[] = querySnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Customer));
+            setCustomers(data);
+            message.success('Đã làm mới danh sách khách hàng!');
+          }}
+        >
+          Làm mới
+        </Button>
+        <Input
+          placeholder="🔍 Tìm kiếm theo tên, số điện thoại, địa chỉ, lịch sử..."
+          prefix={<SearchOutlined />}
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          style={{ width: 350, maxWidth: '100%' }}
+          allowClear
+        />
+      </div>
       
-      <Table columns={columns} dataSource={customers} pagination={{ pageSize: 5 }} />
+      <Table 
+        columns={columns} 
+        dataSource={filteredCustomers} 
+        pagination={{ 
+          pageSize: 10, 
+          showSizeChanger: true, 
+          showQuickJumper: true,
+          showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} khách hàng`
+        }} 
+      />
       
       <Modal
         title={editingCustomer ? 'Cập nhật khách hàng' : 'Thêm khách hàng'}

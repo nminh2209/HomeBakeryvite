@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, Popconfirm, message, Select, Card } from 'antd';
-import { PlusOutlined, AppstoreOutlined, TagOutlined } from '@ant-design/icons';
+import { PlusOutlined, AppstoreOutlined, TagOutlined, SearchOutlined } from '@ant-design/icons';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 
@@ -41,6 +41,17 @@ const Ingredients: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
   const [form] = Form.useForm();
+  const [searchText, setSearchText] = useState('');
+
+  // Filter ingredients based on search text
+  const filteredIngredients = ingredients.filter(ingredient => {
+    const categoryName = categories.find(cat => cat.key === ingredient.category)?.name || '';
+    return ingredient.name.toLowerCase().includes(searchText.toLowerCase()) ||
+           ingredient.brand.toLowerCase().includes(searchText.toLowerCase()) ||
+           categoryName.toLowerCase().includes(searchText.toLowerCase()) ||
+           ingredient.packagingUnit.toLowerCase().includes(searchText.toLowerCase()) ||
+           (ingredient.note && ingredient.note.toLowerCase().includes(searchText.toLowerCase()));
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -99,6 +110,8 @@ const Ingredients: React.FC = () => {
       title: 'Tên nguyên liệu',
       dataIndex: 'name',
       key: 'name',
+      sorter: (a: Ingredient, b: Ingredient) => a.name.localeCompare(b.name),
+      defaultSortOrder: 'ascend' as const,
       render: (text: string, record: Ingredient) => (
         <div>
           <div><strong>{text}</strong></div>
@@ -112,11 +125,13 @@ const Ingredients: React.FC = () => {
       title: 'Hãng sản xuất',
       dataIndex: 'brand',
       key: 'brand',
+      sorter: (a: Ingredient, b: Ingredient) => (a.brand || '').localeCompare(b.brand || ''),
       render: (text: string) => <span>{text || 'Chưa có'}</span>,
     },
     {
       title: 'Dạng đóng gói',
       key: 'packaging',
+      sorter: (a: Ingredient, b: Ingredient) => a.packagingValue - b.packagingValue,
       render: (_: any, record: Ingredient) => (
         <span>{record.packagingValue} {record.packagingUnit}</span>
       ),
@@ -125,6 +140,7 @@ const Ingredients: React.FC = () => {
       title: 'Tồn kho',
       dataIndex: 'currentStock',
       key: 'currentStock',
+      sorter: (a: Ingredient, b: Ingredient) => a.currentStock - b.currentStock,
       render: (stock: number, record: Ingredient) => (
         <span style={{ color: stock < 10 ? '#ff4d4f' : '#000' }}>
           {stock} {record.packagingUnit}
@@ -135,6 +151,7 @@ const Ingredients: React.FC = () => {
       title: 'Đơn giá gần nhất',
       dataIndex: 'lastUnitPrice',
       key: 'lastUnitPrice',
+      sorter: (a: Ingredient, b: Ingredient) => (a.lastUnitPrice || 0) - (b.lastUnitPrice || 0),
       render: (price: number, record: Ingredient) => {
         if (!price || !record.packagingValue) return 'Chưa có';
         const unitPrice = price / record.packagingValue;
@@ -184,10 +201,29 @@ const Ingredients: React.FC = () => {
         </ul>
       </Card>
 
-      <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{ marginBottom: 16 }}>
-        Thêm nguyên liệu
-      </Button>
-      <Table columns={columns} dataSource={ingredients} pagination={{ pageSize: 5 }} />
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+          Thêm nguyên liệu
+        </Button>
+        <Input
+          placeholder="🔍 Tìm kiếm theo tên, hãng, loại nguyên liệu, đơn vị..."
+          prefix={<SearchOutlined />}
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          style={{ width: 350, maxWidth: '100%' }}
+          allowClear
+        />
+      </div>
+      <Table 
+        columns={columns} 
+        dataSource={filteredIngredients} 
+        pagination={{ 
+          pageSize: 10, 
+          showSizeChanger: true, 
+          showQuickJumper: true,
+          showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} nguyên liệu`
+        }} 
+      />
       <Modal
         title={editingIngredient ? 'Cập nhật nguyên liệu' : 'Thêm nguyên liệu'}
         open={isModalOpen}

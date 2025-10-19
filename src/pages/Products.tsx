@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, Upload, message, Popconfirm, Select, Card } from 'antd';
-import { PlusOutlined, UploadOutlined, AppstoreOutlined, TagOutlined } from '@ant-design/icons';
+import { PlusOutlined, UploadOutlined, AppstoreOutlined, TagOutlined, SearchOutlined } from '@ant-design/icons';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { uploadToCloudinary } from '../utils/cloudinaryUpload';
@@ -27,6 +27,16 @@ const Products: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [form] = Form.useForm();
   const [uploading, setUploading] = useState(false);
+  const [searchText, setSearchText] = useState('');
+
+  // Filter products based on search text
+  const filteredProducts = products.filter(product => {
+    const categoryName = categories.find(cat => cat.key === product.category)?.name || '';
+    return product.name.toLowerCase().includes(searchText.toLowerCase()) ||
+           product.productCode.toLowerCase().includes(searchText.toLowerCase()) ||
+           categoryName.toLowerCase().includes(searchText.toLowerCase()) ||
+           product.price.toString().includes(searchText);
+  });
 
   // Load products and categories from Firestore
   useEffect(() => {
@@ -154,17 +164,27 @@ const Products: React.FC = () => {
       title: 'Mã sản phẩm',
       dataIndex: 'productCode',
       key: 'productCode',
+      sorter: (a: Product, b: Product) => a.productCode.localeCompare(b.productCode),
       render: (code: string) => <strong>{code}</strong>,
     },
     {
       title: 'Tên sản phẩm',
       dataIndex: 'name',
       key: 'name',
+      sorter: (a: Product, b: Product) => a.name.localeCompare(b.name),
+      defaultSortOrder: 'ascend' as const,
     },
     {
       title: 'Loại sản phẩm',
       dataIndex: 'category',
       key: 'category',
+      sorter: (a: Product, b: Product) => {
+        const catA = categories.find(cat => cat.key === a.category)?.name || '';
+        const catB = categories.find(cat => cat.key === b.category)?.name || '';
+        return catA.localeCompare(catB);
+      },
+      filters: categories.map(cat => ({ text: cat.name, value: cat.key })),
+      onFilter: (value: any, record: Product) => record.category === value,
       render: (categoryKey: string) => {
         const category = categories.find(cat => cat.key === categoryKey);
         return category ? <span><TagOutlined /> {category.name}</span> : 'Chưa phân loại';
@@ -174,6 +194,8 @@ const Products: React.FC = () => {
       title: 'Giá (VNĐ)',
       dataIndex: 'price',
       key: 'price',
+      sorter: (a: Product, b: Product) => a.price - b.price,
+      defaultSortOrder: 'descend' as const,
       render: (price: number) => price.toLocaleString('vi-VN'),
     },
     {
@@ -221,10 +243,29 @@ const Products: React.FC = () => {
         <p><strong>Ví dụ:</strong> TIR-MAT-1234 (Tiramisu Matcha), CHE-CLA-5678 (Cheesecake Classic)</p>
       </Card>
 
-      <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{ marginBottom: 16 }}>
-        Thêm sản phẩm
-      </Button>
-      <Table columns={columns} dataSource={products} pagination={{ pageSize: 5 }} />
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+          Thêm sản phẩm
+        </Button>
+        <Input
+          placeholder="🔍 Tìm kiếm theo tên, mã sản phẩm, loại sản phẩm, giá..."
+          prefix={<SearchOutlined />}
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          style={{ width: 350, maxWidth: '100%' }}
+          allowClear
+        />
+      </div>
+      <Table 
+        columns={columns} 
+        dataSource={filteredProducts} 
+        pagination={{ 
+          pageSize: 10, 
+          showSizeChanger: true, 
+          showQuickJumper: true,
+          showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} sản phẩm`
+        }} 
+      />
       <Modal
         title={editingProduct ? 'Cập nhật sản phẩm' : 'Thêm sản phẩm'}
         open={isModalOpen}

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, Popconfirm, message, Card } from 'antd';
-import { PlusOutlined, ContactsOutlined, PhoneOutlined, MailOutlined, HomeOutlined } from '@ant-design/icons';
+import { PlusOutlined, ContactsOutlined, PhoneOutlined, MailOutlined, HomeOutlined, SearchOutlined } from '@ant-design/icons';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 
@@ -37,6 +37,17 @@ const Suppliers: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [form] = Form.useForm();
+  const [searchText, setSearchText] = useState('');
+
+  // Filter suppliers based on search text
+  const filteredSuppliers = suppliers.filter(supplier =>
+    supplier.name.toLowerCase().includes(searchText.toLowerCase()) ||
+    supplier.phone.includes(searchText) ||
+    supplier.address.toLowerCase().includes(searchText.toLowerCase()) ||
+    (supplier.email && supplier.email.toLowerCase().includes(searchText.toLowerCase())) ||
+    (supplier.contactPerson && supplier.contactPerson.toLowerCase().includes(searchText.toLowerCase())) ||
+    (supplier.paymentTerms && supplier.paymentTerms.toLowerCase().includes(searchText.toLowerCase()))
+  );
 
   useEffect(() => {
     const fetchSuppliers = async () => {
@@ -93,6 +104,8 @@ const Suppliers: React.FC = () => {
     {
       title: 'Thông tin nhà cung cấp',
       key: 'info',
+      sorter: (a: Supplier, b: Supplier) => a.name.localeCompare(b.name),
+      defaultSortOrder: 'ascend' as const,
       render: (_: any, record: Supplier) => (
         <div>
           <div style={{ fontWeight: 'bold', marginBottom: 4 }}>
@@ -182,10 +195,29 @@ const Suppliers: React.FC = () => {
         </ul>
       </Card>
 
-      <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{ marginBottom: 16 }}>
-        Thêm nhà cung cấp
-      </Button>
-      <Table columns={columns} dataSource={suppliers} pagination={{ pageSize: 5 }} />
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+          Thêm nhà cung cấp
+        </Button>
+        <Input
+          placeholder="🔍 Tìm kiếm theo tên, điện thoại, địa chỉ, email, điều kiện..."
+          prefix={<SearchOutlined />}
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          style={{ width: 350, maxWidth: '100%' }}
+          allowClear
+        />
+      </div>
+      <Table 
+        columns={columns} 
+        dataSource={filteredSuppliers} 
+        pagination={{ 
+          pageSize: 10, 
+          showSizeChanger: true, 
+          showQuickJumper: true,
+          showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} nhà cung cấp`
+        }} 
+      />
       <Modal
         title={editingSupplier ? 'Cập nhật nhà cung cấp' : 'Thêm nhà cung cấp'}
         open={isModalOpen}

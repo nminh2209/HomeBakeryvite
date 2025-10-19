@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, DatePicker, Popconfirm, message, Select, Upload } from 'antd';
-import { PlusOutlined, PrinterOutlined, UploadOutlined, FacebookOutlined, InstagramOutlined } from '@ant-design/icons';
+import { PlusOutlined, PrinterOutlined, UploadOutlined, FacebookOutlined, InstagramOutlined, SearchOutlined } from '@ant-design/icons';
 
 // Hardcoded brand/contact/social info
 const RECEIPT_INFO = {
@@ -116,6 +116,15 @@ const Billing: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [searchText, setSearchText] = useState('');
+
+  // Filter bills based on search text
+  const filteredBills = bills.filter(bill =>
+    bill.customer.toLowerCase().includes(searchText.toLowerCase()) ||
+    bill.date.includes(searchText) ||
+    bill.amount.toString().includes(searchText) ||
+    (bill.note && bill.note.toLowerCase().includes(searchText.toLowerCase()))
+  );
 
   useEffect(() => {
     const fetchBills = async () => {
@@ -231,28 +240,39 @@ const Billing: React.FC = () => {
       title: 'Khách hàng',
       dataIndex: 'customer',
       key: 'customer',
+      sorter: (a: Bill, b: Bill) => a.customer.localeCompare(b.customer),
     },
     {
       title: 'Ngày',
       dataIndex: 'date',
       key: 'date',
+      sorter: (a: Bill, b: Bill) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      defaultSortOrder: 'descend' as const,
     },
     {
       title: 'Số tiền (VNĐ)',
       dataIndex: 'amount',
       key: 'amount',
+      sorter: (a: Bill, b: Bill) => a.amount - b.amount,
       render: (amount: number) => amount.toLocaleString('vi-VN'),
     },
     {
       title: 'Trạng thái',
       dataIndex: 'status',
       key: 'status',
+      sorter: (a: Bill, b: Bill) => a.status.localeCompare(b.status),
+      filters: [
+        { text: 'Đã thanh toán', value: 'paid' },
+        { text: 'Chưa thanh toán', value: 'unpaid' },
+      ],
+      onFilter: (value: any, record: Bill) => record.status === value,
       render: (status: string) => statusOptions.find(opt => opt.value === status)?.label,
     },
     {
       title: 'Ghi chú',
       dataIndex: 'note',
       key: 'note',
+      sorter: (a: Bill, b: Bill) => (a.note || '').localeCompare(b.note || ''),
     },
     {
       title: 'QR Code',
@@ -291,13 +311,32 @@ const Billing: React.FC = () => {
   return (
   <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', padding: '2vw' }}>
       <h2>Quản lý hóa đơn</h2>
-      <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{ marginBottom: 16, marginRight: 8 }}>
-        Thêm hóa đơn
-      </Button>
-      <Button onClick={handleAddFromOrder} style={{ marginBottom: 16 }}>
-        Tạo hóa đơn từ đơn hàng
-      </Button>
-      <Table columns={columns} dataSource={bills} pagination={{ pageSize: 5 }} />
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+          Thêm hóa đơn
+        </Button>
+        <Button onClick={handleAddFromOrder}>
+          Tạo hóa đơn từ đơn hàng
+        </Button>
+        <Input
+          placeholder="🔍 Tìm kiếm theo khách hàng, ngày, số tiền, ghi chú..."
+          prefix={<SearchOutlined />}
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          style={{ width: 350, maxWidth: '100%' }}
+          allowClear
+        />
+      </div>
+      <Table 
+        columns={columns} 
+        dataSource={filteredBills} 
+        pagination={{ 
+          pageSize: 10, 
+          showSizeChanger: true, 
+          showQuickJumper: true,
+          showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} hóa đơn`
+        }} 
+      />
       {/* Hidden receipt containers for printing */}
       <div style={{ display: 'none' }}>
         {bills.map(bill => (

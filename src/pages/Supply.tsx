@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, DatePicker, Popconfirm, message, Select, Card, InputNumber } from 'antd';
-import { PlusOutlined, ShoppingCartOutlined, DollarOutlined, CalendarOutlined } from '@ant-design/icons';
+import { PlusOutlined, ShoppingCartOutlined, DollarOutlined, CalendarOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
@@ -69,6 +69,16 @@ const Supply: React.FC = () => {
   const [subtotal, setSubtotal] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [total, setTotal] = useState(0);
+  const [searchText, setSearchText] = useState('');
+
+  // Filter supply orders based on search text
+  const filteredSupplyOrders = supplyOrders.filter(order => {
+    const ingredientNames = order.items?.map(i => i.ingredientName).join(' ') || '';
+    return order.supplierName.toLowerCase().includes(searchText.toLowerCase()) ||
+           order.orderDate.includes(searchText) ||
+           ingredientNames.toLowerCase().includes(searchText.toLowerCase()) ||
+           (order.note && order.note.toLowerCase().includes(searchText.toLowerCase()));
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -216,6 +226,8 @@ const Supply: React.FC = () => {
     {
       title: 'Thông tin đơn hàng',
       key: 'orderInfo',
+      sorter: (a: SupplyOrder, b: SupplyOrder) => new Date(a.orderDate).getTime() - new Date(b.orderDate).getTime(),
+      defaultSortOrder: 'descend' as const,
       render: (_: any, record: SupplyOrder) => (
         <div>
           <div style={{ fontWeight: 'bold', marginBottom: 4 }}>
@@ -231,6 +243,11 @@ const Supply: React.FC = () => {
       title: 'Nguyên liệu',
       dataIndex: 'items',
       key: 'items',
+      sorter: (a: SupplyOrder, b: SupplyOrder) => {
+        const aItems = a.items?.map(i => i.ingredientName).join(', ') || '';
+        const bItems = b.items?.map(i => i.ingredientName).join(', ') || '';
+        return aItems.localeCompare(bItems);
+      },
       render: (items: PurchaseItem[]) => (
         <div>
           {items?.map((item, idx) => (
@@ -244,6 +261,7 @@ const Supply: React.FC = () => {
     {
       title: 'Tổng tiền',
       key: 'total',
+      sorter: (a: SupplyOrder, b: SupplyOrder) => (a.totalAmount || 0) - (b.totalAmount || 0),
       render: (_: any, record: SupplyOrder) => (
         <div>
           <div><strong>{record.totalAmount?.toLocaleString('vi-VN')} VNĐ</strong></div>
@@ -257,6 +275,13 @@ const Supply: React.FC = () => {
       title: 'Trạng thái TT',
       dataIndex: 'paymentStatus',
       key: 'paymentStatus',
+      sorter: (a: SupplyOrder, b: SupplyOrder) => a.paymentStatus.localeCompare(b.paymentStatus),
+      filters: [
+        { text: 'Đã thanh toán', value: 'paid' },
+        { text: 'Thanh toán một phần', value: 'partial' },
+        { text: 'Chưa thanh toán', value: 'unpaid' },
+      ],
+      onFilter: (value: any, record: SupplyOrder) => record.paymentStatus === value,
       render: (status: string) => {
         const option = paymentStatusOptions.find(opt => opt.value === status);
         const colors: Record<string, string> = {
@@ -303,11 +328,30 @@ const Supply: React.FC = () => {
         </ul>
       </Card>
 
-      <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{ marginBottom: 16 }}>
-        Thêm đơn mua hàng
-      </Button>
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+          Thêm đơn mua hàng
+        </Button>
+        <Input
+          placeholder="🔍 Tìm kiếm theo nhà cung cấp, ngày, nguyên liệu..."
+          prefix={<SearchOutlined />}
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          style={{ width: 350, maxWidth: '100%' }}
+          allowClear
+        />
+      </div>
       
-      <Table columns={columns} dataSource={supplyOrders} pagination={{ pageSize: 5 }} />
+      <Table 
+        columns={columns} 
+        dataSource={filteredSupplyOrders} 
+        pagination={{ 
+          pageSize: 10, 
+          showSizeChanger: true, 
+          showQuickJumper: true,
+          showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} đơn mua hàng`
+        }} 
+      />
       
       <Modal
         title={editingOrder ? 'Cập nhật đơn mua hàng' : 'Thêm đơn mua hàng'}
