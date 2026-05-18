@@ -1,0 +1,14 @@
+rules_version = '2';
+
+// Only this signed-in user (Firebase Auth UID) can read/write Firestore.
+// Find UID: Firebase Console → Authentication → Users → User UID column.
+//
+// Deploy: npm run deploy:rules   (after firebase login)
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == 'Jx7eZunBsPQj1Okh1cuXKeX5je13';
+    }
+  }
+}

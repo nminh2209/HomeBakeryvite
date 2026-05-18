@@ -1,10 +1,18 @@
-// src/utils/cloudinaryUpload.ts
-// Utility to upload images to Cloudinary (unsigned)
+function requireEnv(name: keyof ImportMetaEnv): string {
+  const value = import.meta.env[name];
+  if (!value) {
+    throw new Error(`Missing ${name}. Copy .env.example to .env.`);
+  }
+  return value;
+}
 
+/** Upload images to Cloudinary (unsigned preset). */
 export async function uploadToCloudinary(file: File): Promise<string> {
-  const url = 'https://api.cloudinary.com/v1_1/drifopwan/image/upload';
-  const preset = 'bakery'; // Your unsigned upload preset
-  const folder = 'samples/ecommerce'; // Optional: folder in Cloudinary
+  const cloudName = requireEnv('VITE_CLOUDINARY_CLOUD_NAME');
+  const preset = requireEnv('VITE_CLOUDINARY_UPLOAD_PRESET');
+  const folder = import.meta.env.VITE_CLOUDINARY_FOLDER ?? 'bakery';
+
+  const url = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
 
   const formData = new FormData();
   formData.append('file', file);

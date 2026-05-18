@@ -1,20 +1,28 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+
+function requireEnv(name: keyof ImportMetaEnv): string {
+  const value = import.meta.env[name];
+  if (!value) {
+    throw new Error(
+      `Missing ${name}. Copy .env.example to .env and set your Firebase values.`,
+    );
+  }
+  return value;
+}
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC12TFmPGDqaV6VQGrM-BtAdEmZQ2lZAjs",
-  authDomain: "bakery-4c2f2.firebaseapp.com",
-  projectId: "bakery-4c2f2",
-  storageBucket: "bakery-4c2f2.appspot.com",
-  messagingSenderId: "508917216605",
-  appId: "1:508917216605:web:ed45e1f067569eed8764b4",
-  measurementId: "G-KQTQLDVQB3"
+  apiKey: requireEnv('VITE_FIREBASE_API_KEY'),
+  authDomain: requireEnv('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: requireEnv('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: requireEnv('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: requireEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: requireEnv('VITE_FIREBASE_APP_ID'),
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const storage = getStorage(app);

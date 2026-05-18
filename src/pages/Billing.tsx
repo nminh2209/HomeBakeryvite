@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, DatePicker, Popconfirm, message, Select, Upload } from 'antd';
 import { PlusOutlined, PrinterOutlined, UploadOutlined, FacebookOutlined, InstagramOutlined, SearchOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import { db } from '../firebase';
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { uploadToCloudinary } from '../utils/cloudinaryUpload';
+import type { Order, OrderProduct } from '../types/order';
+import {
+  formatOrderSummary,
+  getOrderLineItems,
+  getOrderTotal,
+  orderToBillStatus,
+} from '../types/order';
 
-// Hardcoded brand/contact/social info
 const RECEIPT_INFO = {
-  brand: 'Tiệm Bánh Minh',
+  brand: 'Tiệm Bánh Vân Ngọc',
   phone: '0123 456 789',
   facebook: 'facebook.com/tiembanhminh',
   instagram: 'instagram.com/tiembanhminh',
@@ -12,7 +22,32 @@ const RECEIPT_INFO = {
   address: '123 Đường Bánh Ngon, Quận 1, TP.HCM',
 };
 
-// Printable receipt component
+interface Bill {
+  key: string;
+  customer: string;
+  customerPhone?: string;
+  date: string;
+  amount: number;
+  subtotal?: number;
+  discount?: number;
+  status: string;
+  note?: string;
+  qrCode?: string;
+  orderId?: string;
+  lineItems?: OrderProduct[];
+}
+
+const statusOptions = [
+  { value: 'paid', label: 'Đã thanh toán' },
+  { value: 'unpaid', label: 'Chưa thanh toán' },
+];
+
+function formatOrderOptionLabel(order: Order): string {
+  const total = getOrderTotal(order);
+  const summary = formatOrderSummary(order);
+  return `${order.customer} — ${summary} — ${total.toLocaleString('vi-VN')} VNĐ (${order.date})`;
+}
+
 const Receipt: React.FC<{ bill: Bill }> = ({ bill }) => (
   <div
     id="print-receipt"
@@ -39,7 +74,24 @@ const Receipt: React.FC<{ bill: Bill }> = ({ bill }) => (
     <div style={{ fontSize: 'clamp(13px, 3vw, 16px)', marginBottom: '2vw' }}>
       <div><b>Khách:</b> {bill.customer}</div>
       <div><b>Ngày:</b> {bill.date}</div>
-      <div><b>Số tiền:</b> {bill.amount.toLocaleString('vi-VN')} VNĐ</div>
+      {bill.customerPhone && <div><b>SĐT:</b> {bill.customerPhone}</div>}
+      {bill.lineItems && bill.lineItems.length > 0 && (
+        <div style={{ marginTop: 8, marginBottom: 8 }}>
+          <div><b>Sản phẩm:</b></div>
+          {bill.lineItems.map((item, idx) => (
+            <div key={idx} style={{ fontSize: 12 }}>
+              {item.productName} x{item.quantity} — {item.total.toLocaleString('vi-VN')} VNĐ
+            </div>
+          ))}
+        </div>
+      )}
+      {bill.subtotal != null && (
+        <div><b>Tạm tính:</b> {bill.subtotal.toLocaleString('vi-VN')} VNĐ</div>
+      )}
+      {bill.discount != null && bill.discount > 0 && (
+        <div><b>Giảm giá:</b> -{bill.discount.toLocaleString('vi-VN')} VNĐ</div>
+      )}
+      <div><b>Tổng cộng:</b> {bill.amount.toLocaleString('vi-VN')} VNĐ</div>
       {bill.note && <div><b>Ghi chú:</b> {bill.note}</div>}
       <div><b>Trạng thái:</b> {statusOptions.find(opt => opt.value === bill.status)?.label}</div>
     </div>
@@ -73,38 +125,6 @@ const Receipt: React.FC<{ bill: Bill }> = ({ bill }) => (
     </div>
   </div>
 );
-import dayjs from 'dayjs';
-import { db } from '../firebase';
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { uploadToCloudinary } from '../utils/cloudinaryUpload';
-
-interface Bill {
-  key: string;
-  customer: string;
-  date: string;
-  amount: number;
-  status: string;
-  note?: string;
-  qrCode?: string;
-  orderId?: string;
-}
-
-interface Order {
-  key: string;
-  customer: string;
-  product: string;
-  quantity: number;
-  date: string;
-  status: string;
-  note?: string;
-}
-
-
-
-const statusOptions = [
-  { value: 'paid', label: 'Đã thanh toán' },
-  { value: 'unpaid', label: 'Chưa thanh toán' },
-];
 
 const Billing: React.FC = () => {
   const [bills, setBills] = useState<Bill[]>([]);
@@ -144,6 +164,7 @@ const Billing: React.FC = () => {
 
   const handleAdd = () => {
     setEditingBill(null);
+    setSelectedOrder(null);
     form.resetFields();
     setIsModalOpen(true);
   };
@@ -155,24 +176,32 @@ const Billing: React.FC = () => {
 
   // When an order is selected, prefill bill form
   const handleSelectOrder = (orderKey: string) => {
-    const order = orders.find(o => o.key === orderKey);
-    if (order) {
-      setSelectedOrder(order);
-      form.setFieldsValue({
-        customer: order.customer,
-        date: dayjs(order.date),
-        amount: order.quantity * 10000, // Example: set amount, adjust as needed
-        note: order.note || '',
-      });
-      setIsOrderModalOpen(false);
-      setEditingBill(null);
-      setIsModalOpen(true);
-    }
+    const order = orders.find((o) => o.key === orderKey);
+    if (!order) return;
+
+    const productNote = formatOrderSummary(order);
+    setSelectedOrder(order);
+    form.setFieldsValue({
+      customer: order.customer,
+      date: dayjs(order.date),
+      amount: getOrderTotal(order),
+      status: orderToBillStatus(order.paymentStatus),
+      note: order.note ? `${order.note} | ${productNote}` : productNote,
+    });
+    setIsOrderModalOpen(false);
+    setEditingBill(null);
+    setIsModalOpen(true);
   };
 
   const handleEdit = (record: Bill) => {
     setEditingBill(record);
-    form.setFieldsValue(record);
+    setSelectedOrder(
+      record.orderId ? orders.find((o) => o.key === record.orderId) ?? null : null,
+    );
+    form.setFieldsValue({
+      ...record,
+      date: dayjs(record.date),
+    });
     setIsModalOpen(true);
   };
 
@@ -203,19 +232,28 @@ const Billing: React.FC = () => {
     try {
       setUploading(true);
       const values = await form.validateFields();
-      let qrCodeUrl = values.qrCode;
+      let qrCodeUrl = editingBill?.qrCode ?? '';
       if (values.qrCode && values.qrCode[0]?.originFileObj) {
         const file = values.qrCode[0].originFileObj;
         qrCodeUrl = await uploadToCloudinary(file);
       }
-      const billData = {
+
+      const lineItems = selectedOrder
+        ? getOrderLineItems(selectedOrder)
+        : editingBill?.lineItems;
+
+      const billData: Omit<Bill, 'key'> = {
         customer: values.customer,
+        customerPhone: selectedOrder?.customerPhone ?? editingBill?.customerPhone,
         date: values.date.format('YYYY-MM-DD'),
         amount: values.amount,
+        subtotal: selectedOrder?.subtotal ?? editingBill?.subtotal,
+        discount: selectedOrder?.discount ?? editingBill?.discount,
         status: values.status,
         note: values.note || '',
         qrCode: qrCodeUrl || '',
-        orderId: selectedOrder ? selectedOrder.key : undefined,
+        orderId: selectedOrder?.key ?? editingBill?.orderId,
+        lineItems: lineItems?.length ? lineItems : undefined,
       };
       if (editingBill) {
         await updateDoc(doc(db, 'bills', editingBill.key), billData);
@@ -356,7 +394,12 @@ const Billing: React.FC = () => {
           style={{ width: '100%' }}
           placeholder="Chọn đơn hàng"
           onChange={handleSelectOrder}
-          options={orders.map(order => ({ value: order.key, label: `${order.customer} - ${order.product} (${order.date})` }))}
+          showSearch
+          optionFilterProp="label"
+          options={orders.map((order) => ({
+            value: order.key,
+            label: formatOrderOptionLabel(order),
+          }))}
         />
       </Modal>
       <Modal
