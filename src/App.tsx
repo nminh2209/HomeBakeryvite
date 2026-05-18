@@ -1,7 +1,7 @@
 
 
-import React, { useState } from 'react';
-import { Layout, Menu, Button } from 'antd';
+import React, { Suspense, useState } from 'react';
+import { Layout, Menu, Button, Spin } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   AppstoreOutlined,
@@ -13,37 +13,40 @@ import {
   FileTextOutlined,
   DropboxOutlined,
 } from '@ant-design/icons';
-import Dashboard from './pages/Dashboard';
 import AdminLogin from './pages/AdminLogin';
 import { auth } from './firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import Orders from './pages/Orders';
-import Supply from './pages/Supply';
-import Suppliers from './pages/Suppliers';
-import Contacts from './pages/Contacts';
-import Ingredients from './pages/Ingredients';
-import IngredientCategories from './pages/IngredientCategories';
-import Products from './pages/Products';
-import ProductCategories from './pages/ProductCategories';
-import Customers from './pages/Customers';
-import Billing from './pages/Billing';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import 'antd/dist/reset.css';
+
+const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+const Orders = React.lazy(() => import('./pages/Orders'));
+const Customers = React.lazy(() => import('./pages/Customers'));
+const Products = React.lazy(() => import('./pages/Products'));
+const ProductCategories = React.lazy(() => import('./pages/ProductCategories'));
+const Ingredients = React.lazy(() => import('./pages/Ingredients'));
+const IngredientCategories = React.lazy(() => import('./pages/IngredientCategories'));
+const Supply = React.lazy(() => import('./pages/Supply'));
+const Suppliers = React.lazy(() => import('./pages/Suppliers'));
+const Contacts = React.lazy(() => import('./pages/Contacts'));
+const Billing = React.lazy(() => import('./pages/Billing'));
 
 const { Header, Content, Sider } = Layout;
 
-const pageMap: Record<string, React.ReactNode> = {
-  dashboard: <Dashboard />,
-  orders: <Orders />,
-  customers: <Customers />,
-  products: <Products />,
-  productCategories: <ProductCategories />,
-  ingredients: <Ingredients />,
-  ingredientCategories: <IngredientCategories />,
-  supply: <Supply />,
-  suppliers: <Suppliers />,
-  contacts: <Contacts />,
-  billing: <Billing />,
-};const menuItems: MenuProps['items'] = [
+const pageMap: Record<string, React.LazyExoticComponent<React.FC>> = {
+  dashboard: Dashboard,
+  orders: Orders,
+  customers: Customers,
+  products: Products,
+  productCategories: ProductCategories,
+  ingredients: Ingredients,
+  ingredientCategories: IngredientCategories,
+  supply: Supply,
+  suppliers: Suppliers,
+  contacts: Contacts,
+  billing: Billing,
+};
+
+const menuItems: MenuProps['items'] = [
   {
     key: 'dashboard',
     icon: <DashboardOutlined />,
@@ -101,10 +104,15 @@ const pageMap: Record<string, React.ReactNode> = {
   },
 ];
 
+const PageFallback = () => (
+  <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+    <Spin size="large" tip="Đang tải..." />
+  </div>
+);
 
 const App: React.FC = () => {
   const [selectedKey, setSelectedKey] = useState('dashboard');
-  const [admin, setAdmin] = useState<any>(null);
+  const [admin, setAdmin] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   React.useEffect(() => {
@@ -114,6 +122,8 @@ const App: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
+
+  const ActivePage = pageMap[selectedKey] ?? Dashboard;
 
   if (loading) return <div>Đang kiểm tra phiên đăng nhập...</div>;
   if (!admin) return <AdminLogin onLogin={() => setAdmin(auth.currentUser)} />;
@@ -144,7 +154,9 @@ const App: React.FC = () => {
         </Header>
         <Content style={{ margin: '24px 16px 0', overflow: 'initial' }}>
           <div style={{ padding: 24, background: '#fff', minHeight: 360 }}>
-            {pageMap[selectedKey]}
+            <Suspense fallback={<PageFallback />}>
+              <ActivePage />
+            </Suspense>
           </div>
         </Content>
       </Layout>

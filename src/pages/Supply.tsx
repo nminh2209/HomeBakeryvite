@@ -6,6 +6,7 @@ import { PlusOutlined, ShoppingCartOutlined, DollarOutlined, CalendarOutlined, S
 import dayjs from 'dayjs';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { syncIngredientStockFromSupply } from '../utils/supplyStock';
 
 interface PurchaseItem {
   ingredientId: string;
@@ -175,9 +176,24 @@ const Supply: React.FC = () => {
   };
 
   const handleDelete = async (key: string) => {
-    await deleteDoc(doc(db, 'supplyOrders', key));
-    setSupplyOrders(supplyOrders.filter((item) => item.key !== key));
-    message.success('Đã xóa đơn mua hàng!');
+    const order = supplyOrders.find((item) => item.key === key);
+    if (!order) return;
+
+    try {
+      const updatedIngredients = await syncIngredientStockFromSupply(
+        order.items ?? [],
+        [],
+        order.orderDate,
+        ingredients,
+      );
+      setIngredients(updatedIngredients);
+      await deleteDoc(doc(db, 'supplyOrders', key));
+      setSupplyOrders((prev) => prev.filter((item) => item.key !== key));
+      message.success('Đã xóa đơn mua hàng và cập nhật tồn kho!');
+    } catch (err) {
+      console.error(err);
+      message.error(err instanceof Error ? err.message : 'Lỗi khi xóa đơn mua hàng!');
+    }
   };
 
   const handleOk = async () => {
@@ -202,14 +218,25 @@ const Supply: React.FC = () => {
         note: values.note || '',
       };
       
+      const oldItems = editingOrder?.items ?? [];
+      const updatedIngredients = await syncIngredientStockFromSupply(
+        oldItems,
+        selectedItems,
+        orderData.orderDate,
+        ingredients,
+      );
+      setIngredients(updatedIngredients);
+
       if (editingOrder) {
         await updateDoc(doc(db, 'supplyOrders', editingOrder.key), orderData);
-        setSupplyOrders(supplyOrders.map((item) => item.key === editingOrder.key ? { ...editingOrder, ...orderData } : item));
-        message.success('Đã cập nhật đơn mua hàng!');
+        setSupplyOrders((prev) =>
+          prev.map((item) => (item.key === editingOrder.key ? { ...editingOrder, ...orderData } : item)),
+        );
+        message.success('Đã cập nhật đơn mua hàng và tồn kho nguyên liệu!');
       } else {
         const docRef = await addDoc(collection(db, 'supplyOrders'), orderData);
-        setSupplyOrders([...supplyOrders, { ...orderData, key: docRef.id }]);
-        message.success('Đã thêm đơn mua hàng!');
+        setSupplyOrders((prev) => [...prev, { ...orderData, key: docRef.id }]);
+        message.success('Đã thêm đơn mua hàng và cập nhật tồn kho nguyên liệu!');
       }
       setIsModalOpen(false);
       form.resetFields();
@@ -218,7 +245,8 @@ const Supply: React.FC = () => {
       setDiscount(0);
       setTotal(0);
     } catch (err) {
-      message.error('Lỗi khi lưu đơn mua hàng!');
+      console.error(err);
+      message.error(err instanceof Error ? err.message : 'Lỗi khi lưu đơn mua hàng!');
     }
   };
 

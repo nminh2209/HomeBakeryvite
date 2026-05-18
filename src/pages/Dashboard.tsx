@@ -1,37 +1,45 @@
-
-
 import React, { useEffect, useState } from 'react';
 import { Card, Row, Col } from 'antd';
 import { db } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
+const DASHBOARD_STAT_DEFS = [
+  { title: 'Sản phẩm', value: 'Tổng số sản phẩm', collection: 'products' },
+  { title: 'Đơn hàng', value: 'Tổng số đơn hàng', collection: 'orders' },
+  { title: 'Nhà cung cấp', value: 'Tổng số nhà cung cấp', collection: 'suppliers' },
+  { title: 'Nguyên liệu', value: 'Tổng số nguyên liệu', collection: 'ingredients' },
+  { title: 'Hóa đơn', value: 'Tổng số hóa đơn', collection: 'bills' },
+] as const;
+
+type DashboardStat = {
+  title: string;
+  value: string;
+  count: string;
+};
+
 const Dashboard: React.FC = () => {
-  const [stats, setStats] = useState([
-    { title: 'Sản phẩm', value: 'Tổng số sản phẩm', count: '...' },
-    { title: 'Đơn hàng', value: 'Tổng số đơn hàng', count: '...' },
-    { title: 'Nhà cung cấp', value: 'Tổng số nhà cung cấp', count: '...' },
-    { title: 'Nguyên liệu', value: 'Tổng số nguyên liệu', count: '...' },
-    { title: 'Hóa đơn', value: 'Tổng số hóa đơn', count: '...' },
-  ]);
+  const [stats, setStats] = useState<DashboardStat[]>(() =>
+    DASHBOARD_STAT_DEFS.map((def) => ({ title: def.title, value: def.value, count: '...' })),
+  );
 
   useEffect(() => {
     const fetchStats = async () => {
-      const collections = [
-        { name: 'products', idx: 0 },
-        { name: 'orders', idx: 1 },
-        { name: 'suppliers', idx: 2 },
-        { name: 'ingredients', idx: 3 },
-        { name: 'bills', idx: 4 },
-      ];
-      const newStats = [...stats];
-      await Promise.all(collections.map(async (col) => {
-        const snap = await getDocs(collection(db, col.name));
-  newStats[col.idx].count = snap.size.toString();
-      }));
-      setStats(newStats);
+      const counts = await Promise.all(
+        DASHBOARD_STAT_DEFS.map(async (def) => {
+          const snap = await getDocs(collection(db, def.collection));
+          return snap.size;
+        }),
+      );
+
+      setStats(
+        DASHBOARD_STAT_DEFS.map((def, idx) => ({
+          title: def.title,
+          value: def.value,
+          count: counts[idx].toString(),
+        })),
+      );
     };
     fetchStats();
-    // eslint-disable-next-line
   }, []);
 
   return (
@@ -47,7 +55,9 @@ const Dashboard: React.FC = () => {
           </Col>
         ))}
       </Row>
-      <p style={{ marginTop: 32 }}>Thống kê tổng quan về tiệm bánh. (Số liệu sẽ được cập nhật khi có dữ liệu thực tế.)</p>
+      <p style={{ marginTop: 32 }}>
+        Thống kê tổng quan về tiệm bánh. (Số liệu sẽ được cập nhật khi có dữ liệu thực tế.)
+      </p>
     </div>
   );
 };

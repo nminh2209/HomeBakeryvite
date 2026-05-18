@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createRoot } from 'react-dom/client';
 import { Table, Button, Modal, Form, Input, InputNumber, DatePicker, Popconfirm, message, Select, Upload } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, PrinterOutlined, UploadOutlined, FacebookOutlined, InstagramOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { db } from '../firebase';
@@ -16,9 +18,9 @@ import {
 const RECEIPT_INFO = {
   brand: 'Tiệm Bánh Vân Ngọc',
   phone: '0123 456 789',
-  facebook: 'facebook.com/tiembanhminh',
-  instagram: 'instagram.com/tiembanhminh',
-  tiktok: 'tiktok.com/@tiembanhminh',
+  facebook: 'facebook.com/tiembanhvanngoc',
+  instagram: 'instagram.com/tiembanhvanngoc',
+  tiktok: 'tiktok.com/@tiembanhvanngoc',
   address: '123 Đường Bánh Ngon, Quận 1, TP.HCM',
 };
 
@@ -126,6 +128,79 @@ const Receipt: React.FC<{ bill: Bill }> = ({ bill }) => (
   </div>
 );
 
+type BillColumnHandlers = {
+  onEdit: (record: Bill) => void;
+  onDelete: (key: string) => void;
+  onPrint: (bill: Bill) => void;
+};
+
+const buildBillColumns = ({ onEdit, onDelete, onPrint }: BillColumnHandlers): ColumnsType<Bill> => [
+  {
+    title: 'Khách hàng',
+    dataIndex: 'customer',
+    key: 'customer',
+    sorter: (a, b) => a.customer.localeCompare(b.customer),
+  },
+  {
+    title: 'Ngày',
+    dataIndex: 'date',
+    key: 'date',
+    sorter: (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    defaultSortOrder: 'descend',
+  },
+  {
+    title: 'Số tiền (VNĐ)',
+    dataIndex: 'amount',
+    key: 'amount',
+    sorter: (a, b) => a.amount - b.amount,
+    render: (amount: number) => amount.toLocaleString('vi-VN'),
+  },
+  {
+    title: 'Trạng thái',
+    dataIndex: 'status',
+    key: 'status',
+    sorter: (a, b) => a.status.localeCompare(b.status),
+    filters: [
+      { text: 'Đã thanh toán', value: 'paid' },
+      { text: 'Chưa thanh toán', value: 'unpaid' },
+    ],
+    onFilter: (value, record) => record.status === value,
+    render: (status: string) => statusOptions.find((opt) => opt.value === status)?.label,
+  },
+  {
+    title: 'Ghi chú',
+    dataIndex: 'note',
+    key: 'note',
+    sorter: (a, b) => (a.note || '').localeCompare(b.note || ''),
+  },
+  {
+    title: 'QR Code',
+    dataIndex: 'qrCode',
+    key: 'qrCode',
+    render: (img: string) =>
+      img ? <img src={img} alt="QR" style={{ width: 60, height: 60 }} /> : 'Không có',
+  },
+  {
+    title: 'Hành động',
+    key: 'action',
+    render: (_: unknown, record: Bill) => (
+      <>
+        <Button type="link" onClick={() => onEdit(record)}>
+          Sửa
+        </Button>
+        <Popconfirm title="Xóa hóa đơn này?" onConfirm={() => onDelete(record.key)} okText="Xóa" cancelText="Hủy">
+          <Button type="link" danger>
+            Xóa
+          </Button>
+        </Popconfirm>
+        <Button type="link" icon={<PrinterOutlined />} onClick={() => onPrint(record)}>
+          In hóa đơn
+        </Button>
+      </>
+    ),
+  },
+];
+
 const Billing: React.FC = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -193,40 +268,54 @@ const Billing: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleEdit = (record: Bill) => {
-    setEditingBill(record);
-    setSelectedOrder(
-      record.orderId ? orders.find((o) => o.key === record.orderId) ?? null : null,
-    );
-    form.setFieldsValue({
-      ...record,
-      date: dayjs(record.date),
-    });
-    setIsModalOpen(true);
-  };
+  const handleEdit = useCallback(
+    (record: Bill) => {
+      setEditingBill(record);
+      setSelectedOrder(
+        record.orderId ? orders.find((o) => o.key === record.orderId) ?? null : null,
+      );
+      form.setFieldsValue({
+        ...record,
+        date: dayjs(record.date),
+      });
+      setIsModalOpen(true);
+    },
+    [orders, form],
+  );
 
-  const handleDelete = async (key: string) => {
+  const handleDelete = useCallback(async (key: string) => {
     await deleteDoc(doc(db, 'bills', key));
-    setBills(bills.filter((item) => item.key !== key));
+    setBills((prev) => prev.filter((item) => item.key !== key));
     message.success('Đã xóa hóa đơn!');
-  };
+  }, []);
 
-  // Print only the receipt for a bill
-  const handlePrintReceipt = (bill: Bill) => {
+  const handlePrintReceipt = useCallback((bill: Bill) => {
     const printWindow = window.open('', '', 'width=400,height=600');
-    if (printWindow) {
-      printWindow.document.write('<html><head><title>In hóa đơn</title>');
-      printWindow.document.write('<style>body{background:#fff;}@media print{@page{size:auto;margin:10mm;}}</style>');
-      printWindow.document.write('</head><body>');
-      printWindow.document.write(document.getElementById('receipt-content-' + bill.key)?.innerHTML || '');
-      printWindow.document.write('</body></html>');
-      printWindow.document.close();
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 300);
-    }
-  };
+    if (!printWindow) return;
+
+    printWindow.document.write(
+      '<!DOCTYPE html><html><head><title>In hóa đơn</title>' +
+        '<style>body{margin:0;background:#fff;}@media print{@page{size:auto;margin:10mm;}}</style>' +
+        '</head><body><div id="receipt-root"></div></body></html>',
+    );
+    printWindow.document.close();
+
+    const rootEl = printWindow.document.getElementById('receipt-root');
+    if (!rootEl) return;
+
+    const root = createRoot(rootEl);
+    root.render(<Receipt bill={bill} />);
+
+    const printAfterLoad = () => {
+      printWindow.focus();
+      printWindow.print();
+      root.unmount();
+      printWindow.close();
+    };
+
+    printWindow.onload = () => setTimeout(printAfterLoad, 300);
+    setTimeout(printAfterLoad, 500);
+  }, []);
 
   const handleOk = async () => {
     try {
@@ -268,76 +357,21 @@ const Billing: React.FC = () => {
       setSelectedOrder(null);
       form.resetFields();
     } catch (err) {
-      message.error('Lỗi khi lưu hóa đơn!');
+      console.error(err);
+      message.error(err instanceof Error ? err.message : 'Lỗi khi lưu hóa đơn!');
     }
     setUploading(false);
   };
 
-  const columns = [
-    {
-      title: 'Khách hàng',
-      dataIndex: 'customer',
-      key: 'customer',
-      sorter: (a: Bill, b: Bill) => a.customer.localeCompare(b.customer),
-    },
-    {
-      title: 'Ngày',
-      dataIndex: 'date',
-      key: 'date',
-      sorter: (a: Bill, b: Bill) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-      defaultSortOrder: 'descend' as const,
-    },
-    {
-      title: 'Số tiền (VNĐ)',
-      dataIndex: 'amount',
-      key: 'amount',
-      sorter: (a: Bill, b: Bill) => a.amount - b.amount,
-      render: (amount: number) => amount.toLocaleString('vi-VN'),
-    },
-    {
-      title: 'Trạng thái',
-      dataIndex: 'status',
-      key: 'status',
-      sorter: (a: Bill, b: Bill) => a.status.localeCompare(b.status),
-      filters: [
-        { text: 'Đã thanh toán', value: 'paid' },
-        { text: 'Chưa thanh toán', value: 'unpaid' },
-      ],
-      onFilter: (value: any, record: Bill) => record.status === value,
-      render: (status: string) => statusOptions.find(opt => opt.value === status)?.label,
-    },
-    {
-      title: 'Ghi chú',
-      dataIndex: 'note',
-      key: 'note',
-      sorter: (a: Bill, b: Bill) => (a.note || '').localeCompare(b.note || ''),
-    },
-    {
-      title: 'QR Code',
-      dataIndex: 'qrCode',
-      key: 'qrCode',
-      render: (img: string) => img ? <img src={img} alt="QR" style={{ width: 60, height: 60 }} /> : 'Không có',
-    },
-    {
-      title: 'Hành động',
-      key: 'action',
-      render: (_: any, record: Bill) => (
-        <>
-          <Button type="link" onClick={() => handleEdit(record)}>
-            Sửa
-          </Button>
-          <Popconfirm title="Xóa hóa đơn này?" onConfirm={() => handleDelete(record.key)} okText="Xóa" cancelText="Hủy">
-            <Button type="link" danger>
-              Xóa
-            </Button>
-          </Popconfirm>
-          <Button type="link" icon={<PrinterOutlined />} onClick={() => handlePrintReceipt(record)}>
-            In hóa đơn
-          </Button>
-        </>
-      ),
-    },
-  ];
+  const columns = useMemo(
+    () =>
+      buildBillColumns({
+        onEdit: handleEdit,
+        onDelete: handleDelete,
+        onPrint: handlePrintReceipt,
+      }),
+    [handleEdit, handleDelete, handlePrintReceipt],
+  );
 
   const normFile = (e: any) => {
     if (Array.isArray(e)) {
@@ -375,14 +409,6 @@ const Billing: React.FC = () => {
           showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} hóa đơn`
         }} 
       />
-      {/* Hidden receipt containers for printing */}
-      <div style={{ display: 'none' }}>
-        {bills.map(bill => (
-          <div key={bill.key} id={'receipt-content-' + bill.key}>
-            <Receipt bill={bill} />
-          </div>
-        ))}
-      </div>
       {/* Modal for selecting order */}
       <Modal
         title="Chọn đơn hàng để tạo hóa đơn"
