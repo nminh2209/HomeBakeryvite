@@ -57,6 +57,27 @@ npm run test:e2e -- e2e/navigation.spec.ts
 
 ---
 
+## 4. `VITE_*` variables (CI build + optional local parity)
+
+The app has **no config defaults in git**. Production uses Vercel env vars; **GitHub Actions build** needs the same names as repository secrets (copy values from Vercel or Firebase/Cloudinary consoles):
+
+| Secret name | Source |
+|-------------|--------|
+| `VITE_FIREBASE_API_KEY` | Firebase Web app config |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase Web app config |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase Web app config |
+| `VITE_FIREBASE_STORAGE_BUCKET` | Firebase Web app config |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase Web app config |
+| `VITE_FIREBASE_APP_ID` | Firebase Web app config |
+| `VITE_FIREBASE_MEASUREMENT_ID` | Optional (Analytics) |
+| `VITE_CLOUDINARY_CLOUD_NAME` | Cloudinary dashboard |
+| `VITE_CLOUDINARY_UPLOAD_PRESET` | Cloudinary upload preset |
+| `VITE_CLOUDINARY_FOLDER` | Cloudinary folder path |
+
+Without these, the **Build** step in CI will fail. Vercel deploys are unaffected if variables are already set in the Vercel project.
+
+---
+
 ## Security notes
 
 - Never commit tokens or passwords to git.

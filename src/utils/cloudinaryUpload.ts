@@ -1,19 +1,10 @@
-const CLOUDINARY_DEFAULTS = {
-  cloudName: 'drifopwan',
-  uploadPreset: 'bakery',
-  folder: 'samples/ecommerce',
-} as const;
-
-function env(key: keyof ImportMetaEnv, fallback: string): string {
-  const v = import.meta.env[key];
-  return typeof v === 'string' && v.trim() !== '' ? v.trim() : fallback;
-}
+import { requireEnv } from './requireEnv';
 
 /** Upload images to Cloudinary (unsigned preset). */
 export async function uploadToCloudinary(file: File): Promise<string> {
-  const cloudName = env('VITE_CLOUDINARY_CLOUD_NAME', CLOUDINARY_DEFAULTS.cloudName);
-  const preset = env('VITE_CLOUDINARY_UPLOAD_PRESET', CLOUDINARY_DEFAULTS.uploadPreset);
-  const folder = env('VITE_CLOUDINARY_FOLDER', CLOUDINARY_DEFAULTS.folder);
+  const cloudName = requireEnv('VITE_CLOUDINARY_CLOUD_NAME');
+  const preset = requireEnv('VITE_CLOUDINARY_UPLOAD_PRESET');
+  const folder = requireEnv('VITE_CLOUDINARY_FOLDER');
 
   const url = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
 
