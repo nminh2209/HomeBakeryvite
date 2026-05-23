@@ -57,21 +57,23 @@ npm run test:e2e -- e2e/navigation.spec.ts
 
 ### Bulk import from `.env` (PowerShell only — not CMD)
 
-From the repo root, in **PowerShell** or **Windows Terminal** (not `cmd.exe`):
+Run in **PowerShell** (not `cmd.exe`), from the repo root after `gh auth login`:
 
 ```powershell
-cd C:\Users\ADMIN\Documents\GitHub\HomeBakeryvite
-gh auth login
-powershell -ExecutionPolicy Bypass -File scripts/sync-env-to-github-secrets.ps1
+Get-Content .env | ForEach-Object {
+  $line = $_.Trim()
+  if ($line -eq '' -or $line.StartsWith('#')) { return }
+  $i = $line.IndexOf('=')
+  if ($i -lt 1) { return }
+  $name = $line.Substring(0, $i).Trim()
+  $value = $line.Substring($i + 1).Trim()
+  if ($value -eq '') { return }
+  gh secret set $name --body $value --repo nminh2209/HomeBakeryvite
+  Write-Host "Set $name"
+}
 ```
 
-Or from an already-open PowerShell session:
-
-```powershell
-.\scripts\sync-env-to-github-secrets.ps1
-```
-
-Each `VITE_*=...` line in `.env` becomes one GitHub secret with the same name.
+Each `VITE_*=...` line becomes one GitHub secret. Re-run only when `.env` values change.
 
 ---
 
