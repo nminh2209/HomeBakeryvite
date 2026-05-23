@@ -1,5 +1,17 @@
 # Testing guide
 
+## Install (match CI — npm 10.9.2)
+
+This repo pins **npm 10.9.2** via `packageManager` in `package.json`. Use the same locally and in CI:
+
+```bash
+corepack enable
+npm run ci:install
+# or: corepack prepare npm@10.9.2 --activate && npm ci
+```
+
+Node version: see `.nvmrc` (20). Do **not** use `npm install` with npm 11 — it can desync `package-lock.json`.
+
 ## Unit tests (Vitest)
 
 ```bash
