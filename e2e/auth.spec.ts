@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Authentication', () => {
   test('shows login form when not authenticated', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.getByText('Đăng nhập quản trị')).toBeVisible();
+    await page.goto('/', { waitUntil: 'networkidle' });
+    await expect(page.getByText('Đăng nhập quản trị')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByLabel('Email')).toBeVisible();
     await expect(page.getByLabel('Mật khẩu')).toBeVisible();
   });

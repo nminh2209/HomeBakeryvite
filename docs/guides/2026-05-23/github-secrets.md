@@ -36,7 +36,9 @@ Push a change to `firestore.rules` (or run the workflow manually under **Actions
 
 ## 3. `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD` (Playwright in CI)
 
-Used by CI job **E2E navigation** (`e2e/navigation.spec.ts`).
+Used **only** by CI job **E2E navigation** (`e2e/navigation.spec.ts`) to log in and visit pages.
+
+**Not used** by smoke tests (`auth.spec.ts`, `app-routes.spec.ts`). Those start `npm run dev` and need all **`VITE_*`** secrets on the e2e job (same as Build). If smoke tests fail with “Đăng nhập quản trị” not found, add the `VITE_*` secrets first—not `E2E_ADMIN_*`.
 
 Use the same Firebase Auth admin account you use in the app (must match `firestore.rules` UID).
 

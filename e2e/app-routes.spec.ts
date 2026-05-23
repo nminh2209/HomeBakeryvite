@@ -7,7 +7,7 @@ const publicPaths = ['/dashboard', '/orders', '/customers', '/products', '/billi
 
 for (const path of publicPaths) {
   test(`unauthenticated visit to ${path} shows login`, async ({ page }) => {
-    await page.goto(path);
-    await expect(page.getByText('Đăng nhập quản trị')).toBeVisible();
+    await page.goto(path, { waitUntil: 'networkidle' });
+    await expect(page.getByText('Đăng nhập quản trị')).toBeVisible({ timeout: 30_000 });
   });
 }
