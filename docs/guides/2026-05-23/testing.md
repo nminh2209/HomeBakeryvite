@@ -1,16 +1,16 @@
 # Testing guide
 
-## Install (match CI — npm 10.9.2)
+## Install (match CI / Vercel)
 
-This repo pins **npm 10.9.2** via `packageManager` in `package.json`. Use the same locally and in CI:
+- **Node 20** — `.nvmrc` and `"engines": { "node": "20.x" }` (Vercel + GitHub Actions)
+- **npm 10.9.2** — recommended via Corepack for lockfile consistency (not enforced in `engines`)
 
 ```bash
 corepack enable
 npm run ci:install
-# or: corepack prepare npm@10.9.2 --activate && npm ci
 ```
 
-Node version: see `.nvmrc` (20). Do **not** use `npm install` with npm 11 — it can desync `package-lock.json`.
+After changing dependencies, regenerate the lock with npm 10: `npx npm@10.9.2 install`, then commit `package-lock.json`.
 
 ## Unit tests (Vitest)
 
