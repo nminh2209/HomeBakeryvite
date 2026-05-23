@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, Popconfirm, message, Card } from 'antd';
 import { PlusOutlined, UserOutlined, PhoneOutlined, HomeOutlined, HistoryOutlined, SearchOutlined } from '@ant-design/icons';
 import { db } from '../firebase';
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 
 interface Customer {
   key: string;
@@ -39,17 +39,21 @@ const Customers: React.FC = () => {
   );
 
   useEffect(() => {
-    const fetchCustomers = async () => {
-      const querySnapshot = await getDocs(collection(db, 'customers'));
-      const data: Customer[] = querySnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Customer));
-      setCustomers(data);
-    };
-    fetchCustomers();
-    
-    // Set up a refresh interval to check for new customers added from other pages
-    const refreshInterval = setInterval(fetchCustomers, 5000); // Refresh every 5 seconds
-    
-    return () => clearInterval(refreshInterval);
+    const unsubscribe = onSnapshot(
+      collection(db, 'customers'),
+      (snapshot) => {
+        const data: Customer[] = snapshot.docs.map((d) => ({
+          key: d.id,
+          ...d.data(),
+        })) as Customer[];
+        setCustomers(data);
+      },
+      (err) => {
+        console.error('customers onSnapshot:', err);
+        message.error('Không thể tải danh sách khách hàng. Kiểm tra kết nối và quyền Firestore.');
+      },
+    );
+    return () => unsubscribe();
   }, []);
 
   const handleAdd = () => {
@@ -172,22 +176,12 @@ const Customers: React.FC = () => {
       <Card style={{ marginBottom: 16 }}>
         <p><strong>Chức năng:</strong> Quản lý, chỉnh sửa thông tin khách hàng</p>
         <p><strong>Tính năng tự động:</strong> Khách hàng sẽ được tự động thêm vào đây khi tạo đơn hàng mới</p>
-        <p><strong>Lưu ý:</strong> Số điện thoại được chuẩn hóa (bắt đầu bằng 0, không cần +84). Nhấn "Làm mới" để cập nhật danh sách.</p>
+        <p><strong>Lưu ý:</strong> Số điện thoại được chuẩn hóa (bắt đầu bằng 0, không cần +84). Danh sách tự cập nhật khi có thay đổi (đơn hàng, tab khác).</p>
       </Card>
 
       <div style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
           Thêm khách hàng
-        </Button>
-        <Button 
-          onClick={async () => {
-            const querySnapshot = await getDocs(collection(db, 'customers'));
-            const data: Customer[] = querySnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Customer));
-            setCustomers(data);
-            message.success('Đã làm mới danh sách khách hàng!');
-          }}
-        >
-          Làm mới
         </Button>
         <Input
           placeholder="🔍 Tìm kiếm theo tên, số điện thoại, địa chỉ, lịch sử..."

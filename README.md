@@ -199,10 +199,23 @@ npm run preview
 ```
 
 ### **Environment Configuration**
-- Firebase project configuration
-- Cloudinary upload presets
-- TypeScript strict mode enabled
-- ESLint and Prettier integration
+
+1. Copy `.env.example` to `.env`.
+2. Fill `VITE_*` values from [Firebase Console → Project settings → Your apps](https://console.firebase.google.com/project/bakery-4c2f2/settings/general) (Web app config: `apiKey`, `appId`, etc.).
+3. Set the same variables on **Vercel** (Production) and redeploy so the build embeds them.
+
+See `.env.example` for field-by-field mapping. Cloudinary keys come from the Cloudinary dashboard.
+
+### **Firestore backups**
+
+Automated backups are configured in Firebase/Google Cloud Console (requires Blaze for scheduled exports). Step-by-step: [docs/guides/2026-05-23/firestore-backups.md](docs/guides/2026-05-23/firestore-backups.md).
+
+### **Deploy**
+
+| Target | Command / action |
+|--------|------------------|
+| Frontend (production) | Vercel — push to connected branch |
+| Firestore rules | `npm run deploy:rules` (after `firebase login`) |
 
 ## 📊 Technical Metrics
 
