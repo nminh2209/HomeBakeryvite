@@ -55,6 +55,24 @@ $env:E2E_ADMIN_PASSWORD="your-password"
 npm run test:e2e -- e2e/navigation.spec.ts
 ```
 
+### Bulk import from `.env` (PowerShell only — not CMD)
+
+From the repo root, in **PowerShell** or **Windows Terminal** (not `cmd.exe`):
+
+```powershell
+cd C:\Users\ADMIN\Documents\GitHub\HomeBakeryvite
+gh auth login
+powershell -ExecutionPolicy Bypass -File scripts/sync-env-to-github-secrets.ps1
+```
+
+Or from an already-open PowerShell session:
+
+```powershell
+.\scripts\sync-env-to-github-secrets.ps1
+```
+
+Each `VITE_*=...` line in `.env` becomes one GitHub secret with the same name.
+
 ---
 
 ## 4. `VITE_*` variables (CI build + optional local parity)
