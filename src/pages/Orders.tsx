@@ -1,33 +1,12 @@
-
-
-import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, InputNumber, DatePicker, Select, Popconfirm, message, Card } from 'antd';
-import { PlusOutlined, PhoneOutlined, UserOutlined, ShoppingCartOutlined, MoneyCollectOutlined, SearchOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Table, Button, Modal, Form, Input, InputNumber, DatePicker, Select, message, Card } from 'antd';
+import { PlusOutlined, PhoneOutlined, UserOutlined, ShoppingCartOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-
-interface Order {
-  key: string;
-  customer: string;
-  customerPhone: string;
-  customerAddress: string;
-  products: OrderProduct[];
-  subtotal: number;
-  discount: number;
-  total: number;
-  date: string;
-  paymentStatus: 'paid' | 'unpaid';
-  note?: string;
-}
-
-interface OrderProduct {
-  productId: string;
-  productName: string;
-  quantity: number;
-  price: number;
-  total: number;
-}
+import { normalizePhone } from '../utils/phone';
+import { buildOrderColumns } from './ordersColumns';
+import type { Order, OrderProduct } from '../types/order';
 
 interface Customer {
   key: string;
@@ -67,7 +46,7 @@ const Orders: React.FC = () => {
   // Filter orders based on search text
   const filteredOrders = orders.filter(order =>
     order.customer.toLowerCase().includes(searchText.toLowerCase()) ||
-    order.customerPhone.includes(searchText) ||
+    (order.customerPhone ?? '').includes(searchText) ||
     order.products?.some(p => p.productName.toLowerCase().includes(searchText.toLowerCase())) ||
     order.date.includes(searchText) ||
     (order.note && order.note.toLowerCase().includes(searchText.toLowerCase()))
@@ -190,7 +169,7 @@ const Orders: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleEdit = (record: Order) => {
+  const handleEdit = useCallback((record: Order) => {
     setEditingOrder(record);
     setSelectedProducts(record.products || []);
     setSubtotal(record.subtotal || 0);
@@ -203,13 +182,13 @@ const Orders: React.FC = () => {
       customerAddress: record.customerAddress,
     });
     setIsModalOpen(true);
-  };
+  }, [form]);
 
-  const handleDelete = async (key: string) => {
+  const handleDelete = useCallback(async (key: string) => {
     await deleteDoc(doc(db, 'orders', key));
-    setOrders(orders.filter((item) => item.key !== key));
+    setOrders((prev) => prev.filter((item) => item.key !== key));
     message.success('Đã xóa đơn hàng!');
-  };
+  }, []);
 
   // Helper function to save customer if they don't exist
   const saveCustomerIfNew = async (customerData: { name: string; phone: string; address: string }) => {
@@ -271,15 +250,8 @@ const Orders: React.FC = () => {
         return;
       }
       
-      // Normalize phone number
-      const normalizedPhone = values.customerPhone.replace(/[\s\-\(\)]/g, '');
-      let finalPhone = normalizedPhone;
-      if (finalPhone.startsWith('+84')) {
-        finalPhone = '0' + finalPhone.slice(3);
-      } else if (finalPhone.startsWith('84')) {
-        finalPhone = '0' + finalPhone.slice(2);
-      }
-      
+      const finalPhone = normalizePhone(values.customerPhone);
+
       const orderData: Omit<Order, 'key'> = {
         customer: values.customer,
         customerPhone: finalPhone,
@@ -289,7 +261,7 @@ const Orders: React.FC = () => {
         discount: discount,
         total: total,
         date: values.date.format('YYYY-MM-DD'),
-        paymentStatus: values.paymentStatus,
+        paymentStatus: values.paymentStatus as 'paid' | 'unpaid',
         note: values.note || '',
       };
       
@@ -317,98 +289,19 @@ const Orders: React.FC = () => {
       setSubtotal(0);
       setDiscount(0);
       setTotal(0);
-    } catch (err) {
+    } catch {
       message.error('Lỗi khi lưu đơn hàng!');
     }
   };
 
-  const columns = [
-    {
-      title: 'Khách hàng',
-      dataIndex: 'customer',
-      key: 'customer',
-      sorter: (a: Order, b: Order) => a.customer.localeCompare(b.customer),
-      render: (text: string, record: Order) => (
-        <div>
-          <div><UserOutlined /> {text}</div>
-          <div style={{ fontSize: 12, color: '#666' }}><PhoneOutlined /> {record.customerPhone}</div>
-        </div>
-      ),
-    },
-    {
-      title: 'Sản phẩm',
-      dataIndex: 'products',
-      key: 'products',
-      sorter: (a: Order, b: Order) => {
-        const aProducts = a.products?.map(p => p.productName).join(', ') || '';
-        const bProducts = b.products?.map(p => p.productName).join(', ') || '';
-        return aProducts.localeCompare(bProducts);
-      },
-      render: (products: OrderProduct[]) => (
-        <div>
-          {products?.map((p, idx) => (
-            <div key={idx} style={{ fontSize: 12 }}>
-              {p.productName} x{p.quantity}
-            </div>
-          ))}
-        </div>
-      ),
-    },
-    {
-      title: 'Tổng tiền',
-      dataIndex: 'total',
-      key: 'total',
-      sorter: (a: Order, b: Order) => (a.total || 0) - (b.total || 0),
-      defaultSortOrder: 'descend' as const,
-      render: (total: number, record: Order) => (
-        <div>
-          <div><strong>{total?.toLocaleString('vi-VN')} VNĐ</strong></div>
-          {record.discount > 0 && (
-            <div style={{ fontSize: 11, color: '#666' }}>Giảm: {record.discount?.toLocaleString('vi-VN')} VNĐ</div>
-          )}
-        </div>
-      ),
-    },
-    {
-      title: 'Ngày',
-      dataIndex: 'date',
-      key: 'date',
-      sorter: (a: Order, b: Order) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-      defaultSortOrder: 'descend' as const,
-    },
-    {
-      title: 'Thanh toán',
-      dataIndex: 'paymentStatus',
-      key: 'paymentStatus',
-      sorter: (a: Order, b: Order) => a.paymentStatus.localeCompare(b.paymentStatus),
-      filters: [
-        { text: 'Đã thanh toán', value: 'paid' },
-        { text: 'Chưa thanh toán', value: 'unpaid' },
-      ],
-      onFilter: (value: any, record: Order) => record.paymentStatus === value,
-      render: (status: string) => {
-        const option = paymentStatusOptions.find(opt => opt.value === status);
-        const color = status === 'paid' ? '#52c41a' : '#f5222d';
-        return <span style={{ color }}><MoneyCollectOutlined /> {option?.label}</span>;
-      },
-    },
-    {
-      title: 'Hành động',
-      key: 'action',
-      render: (_: any, record: Order) => (
-        <>
-          <Button type="link" onClick={() => handleEdit(record)}>
-            Sửa
-          </Button>
-          <Popconfirm title="Xóa đơn hàng này?" onConfirm={() => handleDelete(record.key)} okText="Xóa" cancelText="Hủy">
-            <Button type="link" danger>
-              Xóa
-            </Button>
-          </Popconfirm>
-        </>
-      ),
-    },
-  ];
+  const columns = useMemo(
+    () =>
+      buildOrderColumns({
+        onEdit: handleEdit,
+        onDelete: handleDelete,
+      }),
+    [handleEdit, handleDelete],
+  );
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', padding: '2vw' }}>
@@ -490,14 +383,7 @@ const Orders: React.FC = () => {
                 prefix={<PhoneOutlined />} 
                 placeholder="0123456789 (tự động tìm khách hàng cũ)"
                 onChange={(e) => {
-                  const phone = e.target.value;
-                  const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
-                  let normalized = normalizedPhone;
-                  if (normalized.startsWith('+84')) {
-                    normalized = '0' + normalized.slice(3);
-                  } else if (normalized.startsWith('84')) {
-                    normalized = '0' + normalized.slice(2);
-                  }
+                  const normalized = normalizePhone(e.target.value);
                   const customer = customers.find(c => c.phone === normalized);
                   if (customer) {
                     form.setFieldsValue({

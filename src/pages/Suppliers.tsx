@@ -5,6 +5,7 @@ import { Table, Button, Modal, Form, Input, Popconfirm, message, Card } from 'an
 import { PlusOutlined, ContactsOutlined, PhoneOutlined, MailOutlined, HomeOutlined, SearchOutlined } from '@ant-design/icons';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { normalizePhone } from '../utils/phone';
 
 interface Supplier {
   key: string;
@@ -21,16 +22,6 @@ interface Supplier {
   totalOrders?: number;
   note?: string;
 }
-
-const normalizePhone = (phone: string): string => {
-  let normalized = phone.replace(/[\s\-\(\)]/g, '');
-  if (normalized.startsWith('+84')) {
-    normalized = '0' + normalized.slice(3);
-  } else if (normalized.startsWith('84')) {
-    normalized = '0' + normalized.slice(2);
-  }
-  return normalized;
-};
 
 const Suppliers: React.FC = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);

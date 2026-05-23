@@ -215,7 +215,18 @@ Automated backups are configured in Firebase/Google Cloud Console (requires Blaz
 | Target | Command / action |
 |--------|------------------|
 | Frontend (production) | Vercel — push to connected branch |
-| Firestore rules | `npm run deploy:rules` (after `firebase login`) |
+| Firestore rules | `npm run deploy:rules` (after `firebase login`) or GitHub Action on `firestore.rules` change |
+
+### **Testing**
+
+```bash
+npm run test          # Vitest unit tests
+npm run test:e2e      # Playwright (login + route smoke)
+npm run test:all      # unit + build + e2e
+```
+
+Full guide: [docs/guides/2026-05-23/testing.md](docs/guides/2026-05-23/testing.md).  
+Set `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` locally for authenticated navigation tests.
 
 ## 📊 Technical Metrics
 

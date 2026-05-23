@@ -3,6 +3,7 @@ import { Table, Button, Modal, Form, Input, Popconfirm, message, Card } from 'an
 import { PlusOutlined, UserOutlined, PhoneOutlined, HomeOutlined, HistoryOutlined, SearchOutlined } from '@ant-design/icons';
 import { db } from '../firebase';
 import { collection, addDoc, onSnapshot, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { normalizePhone } from '../utils/phone';
 
 interface Customer {
   key: string;
@@ -11,17 +12,6 @@ interface Customer {
   address: string;
   purchaseHistory?: string;
 }
-
-const normalizePhone = (phone: string): string => {
-  // Normalize phone number to start with 0 (remove +84, spaces, etc.)
-  let normalized = phone.replace(/[\s\-\(\)]/g, '');
-  if (normalized.startsWith('+84')) {
-    normalized = '0' + normalized.slice(3);
-  } else if (normalized.startsWith('84')) {
-    normalized = '0' + normalized.slice(2);
-  }
-  return normalized;
-};
 
 const Customers: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -93,7 +83,7 @@ const Customers: React.FC = () => {
       }
       setIsModalOpen(false);
       form.resetFields();
-    } catch (err) {
+    } catch {
       message.error('Lỗi khi lưu khách hàng!');
     }
   };
@@ -151,7 +141,7 @@ const Customers: React.FC = () => {
     {
       title: 'Hành động',
       key: 'action',
-      render: (_: any, record: Customer) => (
+      render: (_: unknown, record: Customer) => (
         <>
           <Button type="link" onClick={() => handleEdit(record)}>
             Sửa
@@ -226,7 +216,7 @@ const Customers: React.FC = () => {
             label="Số điện thoại"
             rules={[
               { required: true, message: 'Vui lòng nhập số điện thoại!' },
-              { pattern: /^[0-9+\-\s\(\)]+$/, message: 'Số điện thoại không hợp lệ!' }
+              { pattern: /^[0-9+\-\s()]+$/, message: 'Số điện thoại không hợp lệ!' }
             ]}
           >
             <Input 

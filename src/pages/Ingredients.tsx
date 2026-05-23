@@ -1,10 +1,11 @@
 
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, Popconfirm, message, Select, Card } from 'antd';
 import { PlusOutlined, AppstoreOutlined, TagOutlined, SearchOutlined } from '@ant-design/icons';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { useFirestoreCollection } from '../hooks/useFirestoreCollection';
 
 interface Ingredient {
   key: string;
@@ -14,6 +15,7 @@ interface Ingredient {
   packagingValue: number;
   packagingUnit: string;
   currentStock: number;
+  minStock?: number;
   lastPurchaseDate?: string;
   lastUnitPrice?: number;
   note?: string;
@@ -36,7 +38,14 @@ const unitOptions = [
 ];
 
 const Ingredients: React.FC = () => {
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const mapIngredient = useCallback(
+    (id: string, data: Record<string, unknown>) => ({ key: id, ...data }) as Ingredient,
+    [],
+  );
+  const { items: ingredients, loading: ingredientsLoading } = useFirestoreCollection(
+    'ingredients',
+    mapIngredient,
+  );
   const [categories, setCategories] = useState<IngredientCategory[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
@@ -54,18 +63,9 @@ const Ingredients: React.FC = () => {
   });
 
   useEffect(() => {
-    const fetchData = async () => {
-      // Fetch ingredients
-      const ingredientsSnapshot = await getDocs(collection(db, 'ingredients'));
-      const ingredientsData: Ingredient[] = ingredientsSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as Ingredient));
-      setIngredients(ingredientsData);
-      
-      // Fetch categories
-      const categoriesSnapshot = await getDocs(collection(db, 'ingredientCategories'));
-      const categoriesData: IngredientCategory[] = categoriesSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() } as IngredientCategory));
-      setCategories(categoriesData);
-    };
-    fetchData();
+    getDocs(collection(db, 'ingredientCategories')).then((snap) => {
+      setCategories(snap.docs.map((d) => ({ key: d.id, ...d.data() }) as IngredientCategory));
+    });
   }, []);
 
   const handleAdd = () => {
@@ -82,7 +82,6 @@ const Ingredients: React.FC = () => {
 
   const handleDelete = async (key: string) => {
     await deleteDoc(doc(db, 'ingredients', key));
-    setIngredients(ingredients.filter((item) => item.key !== key));
     message.success('Đã xóa nguyên liệu!');
   };
 
@@ -91,11 +90,9 @@ const Ingredients: React.FC = () => {
       const values = await form.validateFields();
       if (editingIngredient) {
         await updateDoc(doc(db, 'ingredients', editingIngredient.key), values);
-        setIngredients(ingredients.map((item) => item.key === editingIngredient.key ? { ...editingIngredient, ...values } : item));
         message.success('Đã cập nhật nguyên liệu!');
       } else {
-        const docRef = await addDoc(collection(db, 'ingredients'), values);
-        setIngredients([...ingredients, { ...values, key: docRef.id }]);
+        await addDoc(collection(db, 'ingredients'), values);
         message.success('Đã thêm nguyên liệu!');
       }
       setIsModalOpen(false);
@@ -214,9 +211,10 @@ const Ingredients: React.FC = () => {
           allowClear
         />
       </div>
-      <Table 
-        columns={columns} 
-        dataSource={filteredIngredients} 
+      <Table
+        loading={ingredientsLoading}
+        columns={columns}
+        dataSource={filteredIngredients}
         pagination={{ 
           pageSize: 10, 
           showSizeChanger: true, 
@@ -286,6 +284,14 @@ const Ingredients: React.FC = () => {
             rules={[{ required: true, message: 'Vui lòng nhập số lượng tồn kho!' }]}
           >
             <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item
+            name="minStock"
+            label="Tồn tối thiểu (cảnh báo)"
+            tooltip="Để trống = dùng ngưỡng mặc định 10 trên bảng điều khiển"
+          >
+            <InputNumber min={0} style={{ width: '100%' }} placeholder="10" />
           </Form.Item>
           
           <Form.Item name="note" label="Ghi chú">

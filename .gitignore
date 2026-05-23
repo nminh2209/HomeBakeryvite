@@ -11,6 +11,10 @@ node_modules
 dist
 dist-ssr
 .firebase/
+playwright-report/
+test-results/
+playwright/.auth/
+coverage/
 *.local
 .env
 .env.*
