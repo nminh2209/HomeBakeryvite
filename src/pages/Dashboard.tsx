@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Row, Col, Table, Spin, Alert } from 'antd';
-import { Column } from '@ant-design/plots';
+import { Area } from '@ant-design/plots';
 import { db } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import type { Order } from '../types/order';
@@ -118,17 +118,47 @@ const Dashboard: React.FC = () => {
       data: revenueData,
       xField: 'month',
       yField: 'revenue',
-      label: {
-        formatter: (datum: { revenue?: number }) =>
-          `${(datum.revenue ?? 0).toLocaleString('vi-VN')} ₫`,
-      },
-      axis: {
-        y: {
-          labelFormatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M`,
+      shapeField: 'smooth',
+      point: {
+        shapeField: 'circle',
+        size: 4,
+        style: {
+          fill: '#ffffff',
+          stroke: '#b67c45',
+          lineWidth: 2,
         },
       },
       style: {
-        fill: '#d4a574',
+        fill: 'linear-gradient(-90deg, rgba(182,124,69,0.35) 0%, rgba(182,124,69,0.05) 100%)',
+      },
+      line: {
+        style: {
+          stroke: '#b67c45',
+          lineWidth: 3,
+        },
+      },
+      axis: {
+        x: {
+          labelAutoRotate: false,
+          labelSpacing: 8,
+        },
+        y: {
+          labelFormatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M`,
+          grid: true,
+        },
+      },
+      interaction: {
+        tooltip: {
+          render: (_: unknown, { title, items }: { title: string; items: { value: number }[] }) => ({
+            title: `Tháng ${title}`,
+            items: [
+              {
+                name: 'Doanh thu',
+                value: `${(items?.[0]?.value ?? 0).toLocaleString('vi-VN')} ₫`,
+              },
+            ],
+          }),
+        },
       },
     }),
     [revenueData],
@@ -162,7 +192,7 @@ const Dashboard: React.FC = () => {
         <Col xs={24} lg={14}>
           <Card title="Doanh thu theo tháng (đơn hàng + hóa đơn lẻ)">
             {revenueData.length > 0 ? (
-              <Column {...revenueChartConfig} />
+              <Area {...revenueChartConfig} height={320} />
             ) : (
               <p style={{ color: '#888' }}>Chưa có dữ liệu doanh thu.</p>
             )}
